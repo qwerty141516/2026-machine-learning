@@ -3,6 +3,6 @@ pandas
 numpy
 scikit-learn
 xgboost
+shap
 folium
 streamlit-folium
-shap
