@@ -5,8 +5,6 @@ import random
 import folium
 
 from streamlit_folium import st_folium
-from sklearn.model_selection import train_test_split
-from xgboost import XGBRegressor
 
 # =========================
 # 🎨 UI
@@ -43,7 +41,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<div class='title'>🏠 서울 주요 대학 근처 월세 예측</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub'>AI 기반 월세 변동 시뮬레이션</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub'>AI 기반 월세 시뮬레이션</div>", unsafe_allow_html=True)
 
 # =========================
 # 🏫 UNIVERSITY
@@ -55,7 +53,7 @@ UNIV = {
 }
 
 # =========================
-# 📊 DATA
+# 🏠 DATA
 # =========================
 @st.cache_data
 def make_rooms():
@@ -77,45 +75,33 @@ def make_rooms():
 
 rooms = make_rooms()
 
+# =========================
+# 🏫 SELECT
+# =========================
 selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 filtered = rooms[rooms["univ"] == selected]
 
 # =========================
-# 🗺️ MAP (핵심 수정: 매물 다시 표시)
+# 📍 CLICK STATE
+# =========================
+clicked = None
+
+# =========================
+# 🗺️ MAP (ONLY ONE MAP - 중요)
 # =========================
 lat, lon = UNIV[selected]
 m = folium.Map(location=[lat, lon], zoom_start=15)
 
-map_data = st_folium(m, height=600, width=1100)
-
-# =========================
-# 📌 CLICK DETECTION
-# =========================
-clicked = None
-
-if map_data and map_data.get("last_object_clicked"):
-    c = map_data["last_object_clicked"]
-
-    temp = filtered.copy()
-    temp["d"] = (temp["lat"]-c["lat"])**2 + (temp["lon"]-c["lng"])**2
-    clicked = temp.sort_values("d").iloc[0]
-
-# =========================
-# 🗺️ 다시 매물 그리기 (여기가 핵심)
-# =========================
 for _, r in filtered.iterrows():
 
-    is_selected = False
+    # 선택된 매물 강조
+    is_clicked = False
 
     if clicked is not None:
-        is_selected = (r["name"] == clicked["name"])
+        is_clicked = (r["name"] == clicked["name"])
 
-    if is_selected:
-        color = "red"
-        radius = 8
-    else:
-        color = "blue"
-        radius = 4
+    color = "red" if is_clicked else "blue"
+    radius = 7 if is_clicked else 4
 
     folium.CircleMarker(
         location=[r["lat"], r["lon"]],
@@ -126,13 +112,25 @@ for _, r in filtered.iterrows():
         tooltip=f"{r['name']} | {r['rent']}만원"
     ).add_to(m)
 
-# 다시 렌더 (중요)
+# ✅ 지도 1번만 렌더링 + 클릭 정보 받기
 map_data = st_folium(m, height=600, width=1100)
 
 # =========================
-# 🌍 ECONOMY
+# 📌 CLICK DETECTION (여기가 핵심)
+# =========================
+if map_data and map_data.get("last_object_clicked"):
+
+    c = map_data["last_object_clicked"]
+
+    temp = filtered.copy()
+    temp["d"] = (temp["lat"] - c["lat"])**2 + (temp["lon"] - c["lng"])**2
+    clicked = temp.sort_values("d").iloc[0]
+
+# =========================
+# 🌍 ECONOMY MODEL
 # =========================
 def market_shift(month, age, dist):
+
     shift = -1.8
 
     if month in [2,3,8,9]:
@@ -161,26 +159,12 @@ st.markdown("<div id='analysis'></div>", unsafe_allow_html=True)
 
 if clicked is not None:
 
-    with st.spinner("🧠 AI가 매물 데이터를 분석 중입니다..."):
-        sample = pd.DataFrame({
-            "면적":[clicked["area"]],
-            "거리":[clicked["dist"]],
-            "연식":[clicked["age"]],
-            "층":[clicked["floor"]],
-            "월":[8],
-            "개강":[1],
-            "현재":[clicked["rent"]],
-            "대학교_고려대":[1 if selected=="고려대" else 0],
-            "대학교_서울대":[1 if selected=="서울대" else 0],
-            "대학교_연세대":[1 if selected=="연세대" else 0]
-        })
-
+    with st.spinner("🧠 AI 분석 중..."):
         base_price = clicked["rent"] * 1.02
         shift = market_shift(8, clicked["age"], clicked["dist"])
         future_price = base_price * (1 + shift/100)
 
         change = (future_price - clicked["rent"]) / clicked["rent"] * 100
-
         avg_rent = filtered["rent"].mean()
 
     # 자동 스크롤
@@ -196,22 +180,21 @@ if clicked is not None:
     st.markdown("## 🤖 AI 분석 리포트")
 
     st.markdown(f"""
-이 매물은 단순한 가격 변화가 아니라
-**입지, 수요, 계절성, 노후도, 거리 변수**가 결합된 결과입니다.
+이 매물은 단순 가격이 아니라 여러 거시/미시 변수의 결합 결과입니다.
 
 ---
 
 📍 현재 월세: **{clicked['rent']}만원**  
-📊 예상 미래 월세: **{future_price:.1f}만원**
+📊 미래 예측: **{future_price:.1f}만원**
 
 ---
 
 ### 🔍 가격 변화 구조
 
 - 💰 금리 영향: -1.8%
-- 🎓 계절 수요: +3.2%
-- 🏗️ 노후도 영향 반영
-- 🚶 거리 프리미엄 반영
+- 🎓 계절 수요 증가: +3.2%
+- 🏗️ 노후도 반영
+- 🚶 거리 프리미엄
 - 📈 인플레이션 +1.0%
 
 ---
@@ -219,7 +202,7 @@ if clicked is not None:
 ### ⚖️ 시장 비교
 
 - 평균 월세: **{avg_rent:.1f}만원**
-- 시장 대비: {"고평가" if clicked['rent'] > avg_rent else "저평가"}
+- 상태: {"고평가" if clicked["rent"] > avg_rent else "저평가"}
 """)
 
     st.markdown(f"""
