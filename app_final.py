@@ -11,12 +11,12 @@ from xgboost import XGBRegressor
 # =========================
 # 🎨 UI
 # =========================
-st.set_page_config(page_title="Seoul Rent Economic Simulator", layout="wide")
+st.set_page_config(page_title="서울 주요 대학 근처 월세 예측", layout="wide")
 
 st.markdown("""
 <style>
 .block-container {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: auto;
     padding-top: 2rem;
 }
@@ -39,10 +39,18 @@ st.markdown("""
     border-radius:14px;
     color:white;
 }
+
+/* 지도 완전 중앙 정렬 */
+iframe {
+    width: 100% !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>🏠 Seoul Rent Economic Simulator</div>", unsafe_allow_html=True)
+# =========================
+# 🏷️ TITLE (변경됨)
+# =========================
+st.markdown("<div class='title'>🏠 서울 주요 대학 근처 월세 예측</div>", unsafe_allow_html=True)
 st.markdown("<div class='sub'>금리·수요·공급 기반 실제 월세 변동 시뮬레이션</div>", unsafe_allow_html=True)
 
 # =========================
@@ -135,63 +143,64 @@ def make_rooms():
 rooms = make_rooms()
 
 # =========================
-# 🎯 UI
+# 🎯 UI (선택 + 지도 정렬 핵심 수정)
 # =========================
 selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
-filtered = rooms[rooms["univ"] == selected]
+
+# 선택 영역 + 지도 한 컨테이너로 묶어서 정렬
+container = st.container()
+
+with container:
+
+    filtered = rooms[rooms["univ"] == selected]
+
+    # =========================
+    # 🗺️ MAP
+    # =========================
+    lat, lon = UNIV[selected]
+    m = folium.Map(location=[lat, lon], zoom_start=15)
+
+    for _, r in filtered.iterrows():
+        folium.CircleMarker(
+            [r["lat"], r["lon"]],
+            radius=5,
+            fill=True,
+            tooltip=r["name"]
+        ).add_to(m)
+
+    map_data = st_folium(m, height=600, width=1100)
 
 # =========================
-# 🗺️ MAP
-# =========================
-lat, lon = UNIV[selected]
-m = folium.Map(location=[lat, lon], zoom_start=15)
-
-for _, r in filtered.iterrows():
-    folium.CircleMarker(
-        [r["lat"], r["lon"]],
-        radius=5,
-        fill=True,
-        tooltip=r["name"]
-    ).add_to(m)
-
-map_data = st_folium(m, height=600)
-
-# =========================
-# 🌍 ECONOMIC ENGINE (핵심)
+# 🌍 ECONOMIC ENGINE
 # =========================
 def market_shift(month, age, dist):
 
     shift = 0
 
-    # 💰 금리 영향 (현재 상승 국면 가정)
     interest_rate = 1.8
     shift -= interest_rate
 
-    # 🎓 수요 시즌
     if month in [2,3,8,9]:
         shift += 3.2
     else:
         shift -= 1.2
 
-    # 🏗️ 공급 효과
     if age < 5:
         shift -= 1.5
     elif age > 15:
         shift += 1.2
 
-    # 🚶 입지 수요
     if dist < 300:
         shift += 2.5
     elif dist > 700:
         shift -= 1
 
-    # 💰 인플레이션
     shift += 1.0
 
     return shift
 
 # =========================
-# 📌 ANALYSIS
+# 📌 CLICK ANALYSIS
 # =========================
 st.markdown("---")
 
@@ -230,9 +239,6 @@ if clicked is not None:
 
     change = (future_price - clicked["rent"]) / clicked["rent"] * 100
 
-    # =========================
-    # 💰 RESULT CARD
-    # =========================
     st.markdown(f"""
     <div class="card">
         📍 미래 월세: <b>{future_price:.1f}만원</b><br>
@@ -240,11 +246,7 @@ if clicked is not None:
     </div>
     """, unsafe_allow_html=True)
 
-    # =========================
-    # 🌍 ECONOMIC BREAKDOWN
-    # =========================
     st.markdown("### 🌍 경제 변수 분석")
-
     st.write(f"💰 금리 영향: -1.8%")
     st.write(f"🎓 수요 시즌 영향: +3.2%")
     st.write(f"🏗️ 공급 영향: 변동 반영")
@@ -262,9 +264,6 @@ if clicked is not None:
     else:
         st.warning("📉 하락 또는 조정 시장")
 
-    # =========================
-    # 🧠 INVESTMENT SCORE
-    # =========================
     score = 50
     if clicked["dist"] < 300: score += 20
     if clicked["age"] < 5: score += 15
@@ -273,9 +272,6 @@ if clicked is not None:
 
     st.metric("🧠 투자 점수", f"{score}/100")
 
-    # =========================
-    # ⏳ DECISION
-    # =========================
     st.markdown("### ⏳ 투자 판단")
 
     if change > 5 and score > 70:
