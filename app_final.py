@@ -4,11 +4,9 @@ import numpy as np
 import random
 import folium
 import time
-import matplotlib.pyplot as plt
 
 from streamlit_folium import st_folium
 import xgboost as xgb
-import shap
 
 # =========================
 # 🌐 PAGE CONFIG
@@ -16,8 +14,7 @@ import shap
 st.set_page_config(
     page_title="AI Rent Intelligence",
     page_icon="🏠",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
 # =========================
@@ -45,7 +42,6 @@ st.markdown("""
     padding: 18px;
     border-radius: 16px;
     color: white;
-    margin-bottom: 10px;
 }
 
 .big-number {
@@ -56,7 +52,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<div class='main-title'>🏠 AI Rent Intelligence</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>SHAP 기반 서울 원룸 가격 분석 시스템</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>서울 원룸 가격 AI 분석 시스템</div>", unsafe_allow_html=True)
 
 # =========================
 # 🏫 DATA
@@ -92,9 +88,6 @@ rooms = make_rooms()
 # =========================
 features = ["area", "dist", "age", "floor"]
 
-X = rooms[features]
-y = rooms["rent"]
-
 model = xgb.XGBRegressor(
     n_estimators=200,
     max_depth=4,
@@ -102,20 +95,24 @@ model = xgb.XGBRegressor(
     random_state=42
 )
 
-model.fit(X, y)
-
-explainer = shap.Explainer(model)
+model.fit(rooms[features], rooms["rent"])
 
 # =========================
-# 🏫 SELECT
+# 🏫 SELECT (UI FIX 핵심)
 # =========================
-selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
+colA, colB = st.columns([1, 3])
+
+with colA:
+    selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
+
+with colB:
+    st.markdown("")
+
 filtered = rooms[rooms["univ"] == selected]
-
 lat, lon = UNIV[selected]
 
 # =========================
-# 🗺 MAP
+# 🗺 MAP (선택 아래 정렬 유지)
 # =========================
 m = folium.Map(location=[lat, lon], zoom_start=15, tiles="cartodbpositron")
 
@@ -129,7 +126,7 @@ for _, r in filtered.iterrows():
         tooltip=f"{r['name']} | {r['rent']}만원"
     ).add_to(m)
 
-map_data = st_folium(m, height=650, width=1100)
+map_data = st_folium(m, height=650, width=None)
 
 # =========================
 # 📌 CLICK DETECTION
@@ -150,13 +147,6 @@ st.markdown("---")
 
 if clicked is not None:
 
-    progress = st.progress(0)
-    status = st.empty()
-
-    status.write("🧠 AI 모델 분석 시작...")
-    time.sleep(0.2)
-    progress.progress(20)
-
     input_data = pd.DataFrame([{
         "area": clicked["area"],
         "dist": clicked["dist"],
@@ -164,32 +154,13 @@ if clicked is not None:
         "floor": clicked["floor"]
     }])
 
-    status.write("📊 가격 예측 계산 중...")
     pred = model.predict(input_data)[0]
-    time.sleep(0.2)
-    progress.progress(50)
-
-    status.write("🔍 SHAP 설명 생성 중...")
-    shap_values = explainer(input_data)
-    time.sleep(0.3)
-    progress.progress(80)
-
-    status.write("📈 결과 정리 중...")
-    time.sleep(0.2)
-    progress.progress(100)
-
-    status.write("완료!")
-    time.sleep(0.3)
-
-    progress.empty()
-    status.empty()
+    diff = ((pred - clicked["rent"]) / clicked["rent"]) * 100
 
     # =========================
     # 📊 DASHBOARD
     # =========================
     col1, col2, col3 = st.columns(3)
-
-    diff = ((pred - clicked["rent"]) / clicked["rent"]) * 100
 
     with col1:
         st.markdown(f"""
@@ -216,26 +187,40 @@ if clicked is not None:
         """, unsafe_allow_html=True)
 
     # =========================
-    # 🧠 SHAP TEXT
+    # 🧠 AI 설명 (핵심 추가)
     # =========================
-    st.markdown("## 🧠 AI 가격 설명 (SHAP)")
+    st.markdown("## 🧠 AI 가격 설명")
 
-    shap_array = shap_values.values[0]
-    impact = list(zip(features, shap_array))
-    impact.sort(key=lambda x: abs(x[1]), reverse=True)
+    reasons = []
 
-    for name, val in impact:
-        icon = "📈" if val > 0 else "📉"
-        st.write(f"{icon} **{name}** → {val:.2f}")
+    if clicked["dist"] < 200:
+        reasons.append("📍 학교와 매우 가까워 수요가 높습니다")
+    elif clicked["dist"] > 600:
+        reasons.append("📍 학교와 거리가 있어 가격이 낮아지는 요인입니다")
 
-    # =========================
-    # 📊 SHAP PLOT (FIXED)
-    # =========================
-    st.markdown("### 📊 SHAP 시각화")
+    if clicked["area"] > 25:
+        reasons.append("🏠 면적이 넓어 가격이 상승합니다")
+    else:
+        reasons.append("🏠 작은 원룸 크기로 인해 가격이 낮습니다")
 
-    plt.clf()
-    shap.plots.waterfall(shap_values[0], show=False)
-    st.pyplot(plt.gcf())
+    if clicked["age"] > 15:
+        reasons.append("🏚️ 건물이 오래되어 감가 요인이 있습니다")
+    else:
+        reasons.append("🏢 비교적 신축 건물입니다")
+
+    if clicked["floor"] >= 5:
+        reasons.append("🏙️ 중·고층으로 선호도가 반영됩니다")
+
+    st.markdown(f"""
+    ### 🤖 AI 분석 결과
+    이 매물의 예상 월세는 **{pred:.1f}만원**이며,  
+    현재 가격({clicked['rent']}만원)과 비교했을 때 **{diff:.1f}% 차이**가 있습니다.
+
+    **주요 요인:**
+    """)
+
+    for r in reasons:
+        st.write("- " + r)
 
     # =========================
     # 📊 MARKET
@@ -243,7 +228,6 @@ if clicked is not None:
     avg = filtered["rent"].mean()
 
     st.markdown("## 📊 시장 비교")
-
     st.write(f"- 평균 월세: **{avg:.1f}만원**")
 
     if clicked["rent"] > avg:
