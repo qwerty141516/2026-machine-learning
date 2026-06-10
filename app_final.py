@@ -3,50 +3,63 @@ import pandas as pd
 import numpy as np
 import random
 import folium
+import time
+import matplotlib.pyplot as plt
 
 from streamlit_folium import st_folium
 import xgboost as xgb
 import shap
 
 # =========================
-# 🎨 UI
+# 🌐 PAGE CONFIG
 # =========================
-st.set_page_config(page_title="서울 주요 대학 근처 월세 예측 (AI+SHAP)", layout="wide")
+st.set_page_config(
+    page_title="AI Rent Intelligence",
+    page_icon="🏠",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
+# =========================
+# 🎨 UI STYLE
+# =========================
 st.markdown("""
 <style>
-.block-container {
-    max-width: 1200px;
-    margin: auto;
-    padding-top: 2rem;
-}
+.block-container { padding: 2rem; }
 
-.title {
-    text-align:center;
-    font-size: 34px;
+.main-title {
+    font-size: 38px;
     font-weight: 800;
+    text-align: center;
+    color: white;
 }
 
-.sub {
-    text-align:center;
-    color: gray;
-    margin-bottom: 20px;
+.sub-title {
+    text-align: center;
+    color: #9ca3af;
+    margin-bottom: 25px;
 }
 
 .card {
-    background:#111827;
-    padding:15px;
-    border-radius:14px;
-    color:white;
+    background: linear-gradient(135deg, #1f2937, #111827);
+    padding: 18px;
+    border-radius: 16px;
+    color: white;
+    margin-bottom: 10px;
+}
+
+.big-number {
+    font-size: 28px;
+    font-weight: 700;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>🏠 서울 주요 대학 근처 월세 예측</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub'>SHAP 기반 AI 가격 설명 시스템</div>", unsafe_allow_html=True)
+st.markdown("<div class='main-title'>🏠 AI Rent Intelligence</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>SHAP 기반 서울 원룸 가격 분석 시스템</div>", unsafe_allow_html=True)
 
 # =========================
-# 🏫 UNIVERSITY
+# 🏫 DATA
 # =========================
 UNIV = {
     "연세대": (37.5658, 126.9386),
@@ -54,31 +67,28 @@ UNIV = {
     "고려대": (37.5894, 127.0324)
 }
 
-# =========================
-# 🏠 DATA
-# =========================
 @st.cache_data
 def make_rooms():
     rooms = []
     for u, (lat, lon) in UNIV.items():
-        for i in range(25):
+        for i in range(30):
             rooms.append({
                 "name": f"{u} 원룸 {i+1}",
                 "univ": u,
                 "lat": lat + random.uniform(-0.004, 0.004),
                 "lon": lon + random.uniform(-0.004, 0.004),
-                "area": random.randint(10, 35),
-                "dist": random.randint(50, 800),
+                "area": random.randint(10, 40),
+                "dist": random.randint(50, 900),
                 "age": random.randint(1, 25),
                 "floor": random.randint(1, 10),
-                "rent": random.randint(35, 90)
+                "rent": random.randint(35, 95)
             })
     return pd.DataFrame(rooms)
 
 rooms = make_rooms()
 
 # =========================
-# 🧠 ML MODEL TRAINING
+# 🧠 MODEL
 # =========================
 features = ["area", "dist", "age", "floor"]
 
@@ -102,23 +112,24 @@ explainer = shap.Explainer(model)
 selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 filtered = rooms[rooms["univ"] == selected]
 
-# =========================
-# 📍 MAP
-# =========================
 lat, lon = UNIV[selected]
-m = folium.Map(location=[lat, lon], zoom_start=15)
+
+# =========================
+# 🗺 MAP
+# =========================
+m = folium.Map(location=[lat, lon], zoom_start=15, tiles="cartodbpositron")
 
 for _, r in filtered.iterrows():
     folium.CircleMarker(
         location=[r["lat"], r["lon"]],
         radius=5,
-        color="blue",
+        color="#3b82f6",
         fill=True,
-        fill_opacity=0.7,
+        fill_opacity=0.8,
         tooltip=f"{r['name']} | {r['rent']}만원"
     ).add_to(m)
 
-map_data = st_folium(m, height=600, width=1100)
+map_data = st_folium(m, height=650, width=1100)
 
 # =========================
 # 📌 CLICK DETECTION
@@ -133,11 +144,18 @@ if map_data and map_data.get("last_object_clicked"):
     clicked = temp.sort_values("d").iloc[0]
 
 # =========================
-# 📊 AI ANALYSIS (SHAP)
+# 🚀 AI ANALYSIS
 # =========================
 st.markdown("---")
 
 if clicked is not None:
+
+    progress = st.progress(0)
+    status = st.empty()
+
+    status.write("🧠 AI 모델 분석 시작...")
+    time.sleep(0.2)
+    progress.progress(20)
 
     input_data = pd.DataFrame([{
         "area": clicked["area"],
@@ -146,67 +164,92 @@ if clicked is not None:
         "floor": clicked["floor"]
     }])
 
-    pred_price = model.predict(input_data)[0]
+    status.write("📊 가격 예측 계산 중...")
+    pred = model.predict(input_data)[0]
+    time.sleep(0.2)
+    progress.progress(50)
+
+    status.write("🔍 SHAP 설명 생성 중...")
     shap_values = explainer(input_data)
+    time.sleep(0.3)
+    progress.progress(80)
 
-    st.markdown("## 🤖 AI 분석 리포트 (SHAP 기반)")
+    status.write("📈 결과 정리 중...")
+    time.sleep(0.2)
+    progress.progress(100)
 
-    st.write(f"""
-📍 현재 월세: **{clicked['rent']}만원**  
-📊 AI 예측 월세: **{pred_price:.1f}만원**
-""")
+    status.write("완료!")
+    time.sleep(0.3)
+
+    progress.empty()
+    status.empty()
 
     # =========================
-    # 🔍 SHAP 설명
+    # 📊 DASHBOARD
     # =========================
-    st.markdown("### 🔍 가격 결정 요인 (AI 해석)")
+    col1, col2, col3 = st.columns(3)
+
+    diff = ((pred - clicked["rent"]) / clicked["rent"]) * 100
+
+    with col1:
+        st.markdown(f"""
+        <div class="card">
+            📍 현재 월세<br>
+            <div class="big-number">{clicked['rent']}만원</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"""
+        <div class="card">
+            🤖 AI 예측<br>
+            <div class="big-number">{pred:.1f}만원</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown(f"""
+        <div class="card">
+            📊 차이율<br>
+            <div class="big-number">{diff:.1f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # =========================
+    # 🧠 SHAP TEXT
+    # =========================
+    st.markdown("## 🧠 AI 가격 설명 (SHAP)")
 
     shap_array = shap_values.values[0]
     impact = list(zip(features, shap_array))
     impact.sort(key=lambda x: abs(x[1]), reverse=True)
 
     for name, val in impact:
-        if val > 0:
-            st.write(f"📈 {name}: +{val:.2f}")
-        else:
-            st.write(f"📉 {name}: {val:.2f}")
+        icon = "📈" if val > 0 else "📉"
+        st.write(f"{icon} **{name}** → {val:.2f}")
 
     # =========================
-    # 📊 비교
-    # =========================
-    avg_rent = filtered["rent"].mean()
-
-    st.markdown("### ⚖️ 시장 비교")
-
-    st.write(f"- 평균 월세: **{avg_rent:.1f}만원**")
-    st.write("상태: " + ("고평가" if clicked["rent"] > avg_rent else "저평가"))
-
-    # =========================
-    # 💰 결과 카드
-    # =========================
-    st.markdown(f"""
-    <div class="card">
-        📊 AI 예측 월세: <b>{pred_price:.1f}만원</b>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # =========================
-    # 🧠 투자 점수
-    # =========================
-    score = 50
-    if clicked["dist"] < 300: score += 20
-    if clicked["age"] < 5: score += 15
-    if abs(pred_price - clicked["rent"]) < 5: score += 10
-
-    st.metric("🧠 투자 점수", f"{score}/100")
-
-    # =========================
-    # 📊 SHAP Waterfall
+    # 📊 SHAP PLOT (FIXED)
     # =========================
     st.markdown("### 📊 SHAP 시각화")
 
-    fig = shap.plots.waterfall(shap_values[0], show=False)
-    st.pyplot(fig)
+    plt.clf()
+    shap.plots.waterfall(shap_values[0], show=False)
+    st.pyplot(plt.gcf())
+
+    # =========================
+    # 📊 MARKET
+    # =========================
+    avg = filtered["rent"].mean()
+
+    st.markdown("## 📊 시장 비교")
+
+    st.write(f"- 평균 월세: **{avg:.1f}만원**")
+
+    if clicked["rent"] > avg:
+        st.error("📈 시장 대비 고가 매물")
+    else:
+        st.success("📉 시장 대비 저가 매물")
 
 else:
     st.info("지도에서 매물을 클릭하면 AI 분석이 시작됩니다.")
