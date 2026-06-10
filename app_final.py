@@ -9,26 +9,26 @@ from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 
 # =========================
-# 🎨 UI SETUP (CENTERED STYLE)
+# 🎨 UI
 # =========================
-st.set_page_config(page_title="Seoul Rent AI", layout="wide")
+st.set_page_config(page_title="Seoul Rent Economic Simulator", layout="wide")
 
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 2rem;
     max-width: 1100px;
     margin: auto;
+    padding-top: 2rem;
 }
 
 .title {
+    text-align:center;
     font-size: 34px;
     font-weight: 800;
-    text-align: center;
 }
 
 .sub {
-    text-align: center;
+    text-align:center;
     color: gray;
     margin-bottom: 20px;
 }
@@ -38,22 +38,15 @@ st.markdown("""
     padding:15px;
     border-radius:14px;
     color:white;
-    margin-top:10px;
-}
-
-.big {
-    font-size: 22px;
-    font-weight: 700;
-    color: #60a5fa;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='title'>🏠 Seoul Real Estate AI</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub'>AI 기반 미래 월세 예측 & 투자 분석</div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>🏠 Seoul Rent Economic Simulator</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub'>금리·수요·공급 기반 실제 월세 변동 시뮬레이션</div>", unsafe_allow_html=True)
 
 # =========================
-# 🏫 DATA
+# 🏫 UNIVERSITY
 # =========================
 UNIV = {
     "연세대": (37.5658, 126.9386),
@@ -61,12 +54,16 @@ UNIV = {
     "고려대": (37.5894, 127.0324)
 }
 
+# =========================
+# 📊 DATA
+# =========================
 @st.cache_data
 def make_data():
     random.seed(42)
     np.random.seed(42)
 
     data = []
+
     for _ in range(3000):
         u = random.choice(list(UNIV.keys()))
         area = random.randint(10, 35)
@@ -81,7 +78,7 @@ def make_data():
         rent = base + area*1.2 - dist*0.015 - age*0.5 + floor*0.8 + semester*6
         rent += np.random.normal(0,3)
 
-        future = rent + semester*2 + np.random.normal(1.5,2)
+        future = rent + np.random.normal(1.5,2)
 
         data.append([u, area, dist, age, floor, month, semester, rent, future])
 
@@ -98,6 +95,9 @@ y = df["미래"]
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
+# =========================
+# 🤖 MODEL
+# =========================
 @st.cache_resource
 def train_model():
     model = XGBRegressor(
@@ -141,7 +141,7 @@ selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 filtered = rooms[rooms["univ"] == selected]
 
 # =========================
-# 🗺️ MAP CENTER
+# 🗺️ MAP
 # =========================
 lat, lon = UNIV[selected]
 m = folium.Map(location=[lat, lon], zoom_start=15)
@@ -157,7 +157,41 @@ for _, r in filtered.iterrows():
 map_data = st_folium(m, height=600)
 
 # =========================
-# 📌 CENTER ANALYSIS PANEL
+# 🌍 ECONOMIC ENGINE (핵심)
+# =========================
+def market_shift(month, age, dist):
+
+    shift = 0
+
+    # 💰 금리 영향 (현재 상승 국면 가정)
+    interest_rate = 1.8
+    shift -= interest_rate
+
+    # 🎓 수요 시즌
+    if month in [2,3,8,9]:
+        shift += 3.2
+    else:
+        shift -= 1.2
+
+    # 🏗️ 공급 효과
+    if age < 5:
+        shift -= 1.5
+    elif age > 15:
+        shift += 1.2
+
+    # 🚶 입지 수요
+    if dist < 300:
+        shift += 2.5
+    elif dist > 700:
+        shift -= 1
+
+    # 💰 인플레이션
+    shift += 1.0
+
+    return shift
+
+# =========================
+# 📌 ANALYSIS
 # =========================
 st.markdown("---")
 
@@ -171,7 +205,7 @@ if map_data and map_data.get("last_object_clicked"):
     clicked = temp.sort_values("d").iloc[0]
 
 # =========================
-# 🧠 ANALYSIS
+# 🧠 RESULT
 # =========================
 if clicked is not None:
 
@@ -188,48 +222,45 @@ if clicked is not None:
         "대학교_연세대":[1 if selected=="연세대" else 0]
     })
 
-    pred = float(model.predict(sample)[0])
-    change = (pred - clicked["rent"]) / clicked["rent"] * 100
+    base_price = model.predict(sample)[0]
+
+    shift = market_shift(8, clicked["age"], clicked["dist"])
+
+    future_price = base_price * (1 + shift/100)
+
+    change = (future_price - clicked["rent"]) / clicked["rent"] * 100
 
     # =========================
     # 💰 RESULT CARD
     # =========================
     st.markdown(f"""
     <div class="card">
-        <div class="big">📈 미래 월세: {pred:.1f}만원</div>
-        현재 {clicked['rent']}만원 → 변화 {change:.1f}%
+        📍 미래 월세: <b>{future_price:.1f}만원</b><br>
+        현재 → 변화: {change:.1f}%
     </div>
     """, unsafe_allow_html=True)
 
     # =========================
-    # 🧠 GPT STYLE EXPLANATION
+    # 🌍 ECONOMIC BREAKDOWN
     # =========================
-    st.markdown("### 🧠 AI 분석 리포트 (GPT 스타일)")
+    st.markdown("### 🌍 경제 변수 분석")
 
-    def gpt_style_text(r, p, ch):
-        text = f"""
-이 매물은 현재 {r['rent']}만원 수준에서 형성되어 있으며,
-AI 예측 결과 약 {p:.1f}만원까지 변화할 것으로 분석됩니다.
+    st.write(f"💰 금리 영향: -1.8%")
+    st.write(f"🎓 수요 시즌 영향: +3.2%")
+    st.write(f"🏗️ 공급 영향: 변동 반영")
+    st.write(f"🚶 입지 영향: 자동 반영")
+    st.write(f"📈 인플레이션: +1.0%")
 
-이 변화의 핵심 요인은 다음과 같습니다.
+    total_shift = shift
 
-- 해당 매물은 대학과의 거리 {r['dist']}m 수준으로 수요 영향이 반영됩니다.
-- 건물 연식은 {r['age']}년으로, 노후도에 따라 가격 압력이 존재합니다.
-- 면적 {r['area']}㎡는 수요 대비 경쟁력을 결정하는 요소입니다.
-- 시장 전체적으로는 학기 시즌 및 지역 수요 변화가 함께 반영됩니다.
+    st.markdown("### 📊 총 시장 변화")
 
-종합적으로 판단하면,
-"""
-        if ch > 5:
-            text += "상승 압력이 강한 지역으로, 단기적으로도 추가 상승 가능성이 존재합니다."
-        elif ch > 0:
-            text += "완만한 상승 흐름이 예상되는 안정적인 매물입니다."
-        else:
-            text += "단기적으로는 가격 조정 또는 횡보 가능성이 존재합니다."
-
-        return text
-
-    st.info(gpt_style_text(clicked, pred, change))
+    if total_shift > 3:
+        st.success("📈 강한 상승 시장")
+    elif total_shift > 0:
+        st.info("📊 완만한 상승 시장")
+    else:
+        st.warning("📉 하락 또는 조정 시장")
 
     # =========================
     # 🧠 INVESTMENT SCORE
@@ -242,24 +273,17 @@ AI 예측 결과 약 {p:.1f}만원까지 변화할 것으로 분석됩니다.
 
     st.metric("🧠 투자 점수", f"{score}/100")
 
-    if score >= 80:
-        st.success("🔥 적극 추천")
-    elif score >= 60:
-        st.info("🟡 조건부 추천")
-    else:
-        st.warning("🔴 비추천")
-
     # =========================
-    # ⏳ BUY / WAIT
+    # ⏳ DECISION
     # =========================
     st.markdown("### ⏳ 투자 판단")
 
     if change > 5 and score > 70:
-        st.success("👉 지금 매수 추천 (상승 모멘텀 존재)")
+        st.success("👉 지금 매수 (상승 사이클 진입)")
     elif change > 0:
-        st.info("👉 관망 또는 빠른 결정 필요")
+        st.info("👉 보유 또는 관망")
     else:
-        st.warning("👉 기다리는 것이 유리")
+        st.warning("👉 대기 전략 추천")
 
 else:
-    st.info("지도에서 매물을 클릭하면 AI 분석이 시작됩니다")
+    st.info("지도에서 매물을 클릭하면 경제 시뮬레이션이 시작됩니다")
