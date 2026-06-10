@@ -2,238 +2,151 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
-import folium
 import time
+import folium
 
 from streamlit_folium import st_folium
-import xgboost as xgb
+import matplotlib.pyplot as plt
 
 # =========================
-# 🌐 PAGE CONFIG
+# 🌐 CONFIG
 # =========================
-st.set_page_config(
-    page_title="AI Rent Intelligence",
-    page_icon="🏠",
-    layout="wide"
-)
+st.set_page_config(page_title="Macro Rent AI", layout="wide")
 
-# =========================
-# 🎨 UI STYLE
-# =========================
 st.markdown("""
-<style>
-.block-container { padding: 2rem; }
-
-.main-title {
-    font-size: 38px;
-    font-weight: 800;
-    text-align: center;
-    color: white;
-}
-
-.sub-title {
-    text-align: center;
-    color: #9ca3af;
-    margin-bottom: 25px;
-}
-
-.card {
-    background: linear-gradient(135deg, #1f2937, #111827);
-    padding: 18px;
-    border-radius: 16px;
-    color: white;
-}
-
-.big-number {
-    font-size: 28px;
-    font-weight: 700;
-}
-</style>
+<h1 style='text-align:center;'>🏠 Macro Rent AI Simulator</h1>
+<p style='text-align:center;color:gray;'>금리 · 환율 · 경제 변화 기반 월세 예측</p>
 """, unsafe_allow_html=True)
 
-st.markdown("<div class='main-title'>🏠 AI Rent Intelligence</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-title'>서울 원룸 가격 AI 분석 시스템</div>", unsafe_allow_html=True)
+# =========================
+# 🏦 MACRO SLIDERS
+# =========================
+st.sidebar.header("📊 경제 변수")
 
-# =========================
-# 🏫 DATA
-# =========================
-UNIV = {
-    "연세대": (37.5658, 126.9386),
-    "서울대": (37.4599, 126.9519),
-    "고려대": (37.5894, 127.0324)
+interest = st.sidebar.slider("금리 (%)", 1.0, 6.0, 3.5, 0.1)
+inflation = st.sidebar.slider("물가 상승률 (%)", 0.0, 6.0, 2.5, 0.1)
+exchange = st.sidebar.slider("환율 (USD/KRW)", 1100, 1600, 1350, 10)
+
+event = st.sidebar.slider("지역 경제 이벤트 (-1 ~ 1)", -1.0, 1.0, 0.0, 0.1)
+supply = st.sidebar.slider("공급 지수 (낮을수록 부족)", 0.5, 1.5, 1.0, 0.1)
+
+macro = {
+    "interest": interest,
+    "inflation": inflation,
+    "exchange": exchange,
+    "event": event,
+    "supply": supply
 }
 
-@st.cache_data
-def make_rooms():
-    rooms = []
-    for u, (lat, lon) in UNIV.items():
-        for i in range(30):
-            rooms.append({
-                "name": f"{u} 원룸 {i+1}",
-                "univ": u,
-                "lat": lat + random.uniform(-0.004, 0.004),
-                "lon": lon + random.uniform(-0.004, 0.004),
-                "area": random.randint(10, 40),
-                "dist": random.randint(50, 900),
-                "age": random.randint(1, 25),
-                "floor": random.randint(1, 10),
-                "rent": random.randint(35, 95)
-            })
-    return pd.DataFrame(rooms)
+# =========================
+# 🏠 SAMPLE RENT DATA
+# =========================
+def base_rent():
+    return 70
 
-rooms = make_rooms()
+def predict_rent(m):
+    rent = (
+        base_rent()
+        + m["interest"] * 4
+        + (m["exchange"] - 1300) * 0.03
+        + m["inflation"] * 3
+        + m["event"] * 10
+        - m["supply"] * 12
+    )
+    return max(30, rent)
+
+current_rent = predict_rent(macro)
 
 # =========================
-# 🧠 MODEL
+# 📈 PRICE CHANGE ANIMATION
 # =========================
-features = ["area", "dist", "age", "floor"]
+st.markdown("## 📊 가격 변화 시뮬레이션")
 
-model = xgb.XGBRegressor(
-    n_estimators=200,
-    max_depth=4,
-    learning_rate=0.1,
-    random_state=42
-)
+history = []
+base = 65
 
-model.fit(rooms[features], rooms["rent"])
+for i in range(10):
+    noise = random.uniform(-2, 2)
+    value = base + i * (current_rent - base) / 9 + noise
+    history.append(value)
 
-# =========================
-# 🏫 SELECT (UI FIX 핵심)
-# =========================
-colA, colB = st.columns([1, 3])
+chart_area = st.empty()
 
-with colA:
-    selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
-
-with colB:
-    st.markdown("")
-
-filtered = rooms[rooms["univ"] == selected]
-lat, lon = UNIV[selected]
+for i in range(1, len(history)+1):
+    fig, ax = plt.subplots()
+    ax.plot(range(i), history[:i], marker="o")
+    ax.set_title("월세 변화 추이")
+    ax.set_ylim(min(history)-5, max(history)+5)
+    chart_area.pyplot(fig)
+    time.sleep(0.15)
 
 # =========================
-# 🗺 MAP (선택 아래 정렬 유지)
+# 📊 RESULT DASHBOARD
 # =========================
-m = folium.Map(location=[lat, lon], zoom_start=15, tiles="cartodbpositron")
+st.markdown("## 💰 현재 분석 결과")
 
-for _, r in filtered.iterrows():
-    folium.CircleMarker(
-        location=[r["lat"], r["lon"]],
-        radius=5,
-        color="#3b82f6",
-        fill=True,
-        fill_opacity=0.8,
-        tooltip=f"{r['name']} | {r['rent']}만원"
-    ).add_to(m)
+col1, col2 = st.columns(2)
 
-map_data = st_folium(m, height=650, width=None)
+with col1:
+    st.metric("예측 월세", f"{current_rent:.1f} 만원")
+
+with col2:
+    st.metric("기준 대비 변화", f"{((current_rent/base_rent())-1)*100:.1f}%")
 
 # =========================
-# 📌 CLICK DETECTION
+# 🤖 GPT STYLE EXPLANATION
 # =========================
-clicked = None
+st.markdown("## 🤖 AI 분석 리포트")
 
-if map_data and map_data.get("last_object_clicked"):
-    c = map_data["last_object_clicked"]
+reason = []
 
-    temp = filtered.copy()
-    temp["d"] = (temp["lat"] - c["lat"])**2 + (temp["lon"] - c["lng"])**2
-    clicked = temp.sort_values("d").iloc[0]
+if interest > 4:
+    reason.append("금리 상승으로 인해 대출 부담이 증가하여 월세 상승 압력이 발생합니다.")
+
+if inflation > 3:
+    reason.append("물가 상승으로 인해 전반적인 임대료가 상승하는 구조입니다.")
+
+if exchange > 1450:
+    reason.append("환율 상승으로 외국인 수요 변화 및 투자 자금 유입 가능성이 증가합니다.")
+
+if event > 0.3:
+    reason.append("지역 개발 및 호재로 인해 수요가 증가하고 있습니다.")
+
+elif event < -0.3:
+    reason.append("지역 악재로 인해 수요 감소 압력이 존재합니다.")
+
+if supply < 0.8:
+    reason.append("공급 부족으로 인해 가격 상승 압력이 강합니다.")
+
+elif supply > 1.2:
+    reason.append("공급 과잉으로 인해 가격 하락 요인이 존재합니다.")
+
+st.markdown(f"""
+### 🧠 AI 분석 요약
+
+현재 경제 조건에서 월세는 **{current_rent:.1f}만원** 수준으로 예측됩니다.
+
+**핵심 요인:**
+""")
+
+for r in reason:
+    st.write("• " + r)
 
 # =========================
-# 🚀 AI ANALYSIS
+# 📊 MINI CHART (ECONOMY)
 # =========================
-st.markdown("---")
+st.markdown("## 📉 경제 변수 영향도")
 
-if clicked is not None:
+labels = ["금리", "물가", "환율", "이벤트", "공급"]
+values = [
+    interest * 4,
+    inflation * 3,
+    (exchange - 1300) * 0.03,
+    event * 10,
+    -supply * 12
+]
 
-    input_data = pd.DataFrame([{
-        "area": clicked["area"],
-        "dist": clicked["dist"],
-        "age": clicked["age"],
-        "floor": clicked["floor"]
-    }])
-
-    pred = model.predict(input_data)[0]
-    diff = ((pred - clicked["rent"]) / clicked["rent"]) * 100
-
-    # =========================
-    # 📊 DASHBOARD
-    # =========================
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown(f"""
-        <div class="card">
-            📍 현재 월세<br>
-            <div class="big-number">{clicked['rent']}만원</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown(f"""
-        <div class="card">
-            🤖 AI 예측<br>
-            <div class="big-number">{pred:.1f}만원</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        st.markdown(f"""
-        <div class="card">
-            📊 차이율<br>
-            <div class="big-number">{diff:.1f}%</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # =========================
-    # 🧠 AI 설명 (핵심 추가)
-    # =========================
-    st.markdown("## 🧠 AI 가격 설명")
-
-    reasons = []
-
-    if clicked["dist"] < 200:
-        reasons.append("📍 학교와 매우 가까워 수요가 높습니다")
-    elif clicked["dist"] > 600:
-        reasons.append("📍 학교와 거리가 있어 가격이 낮아지는 요인입니다")
-
-    if clicked["area"] > 25:
-        reasons.append("🏠 면적이 넓어 가격이 상승합니다")
-    else:
-        reasons.append("🏠 작은 원룸 크기로 인해 가격이 낮습니다")
-
-    if clicked["age"] > 15:
-        reasons.append("🏚️ 건물이 오래되어 감가 요인이 있습니다")
-    else:
-        reasons.append("🏢 비교적 신축 건물입니다")
-
-    if clicked["floor"] >= 5:
-        reasons.append("🏙️ 중·고층으로 선호도가 반영됩니다")
-
-    st.markdown(f"""
-    ### 🤖 AI 분석 결과
-    이 매물의 예상 월세는 **{pred:.1f}만원**이며,  
-    현재 가격({clicked['rent']}만원)과 비교했을 때 **{diff:.1f}% 차이**가 있습니다.
-
-    **주요 요인:**
-    """)
-
-    for r in reasons:
-        st.write("- " + r)
-
-    # =========================
-    # 📊 MARKET
-    # =========================
-    avg = filtered["rent"].mean()
-
-    st.markdown("## 📊 시장 비교")
-    st.write(f"- 평균 월세: **{avg:.1f}만원**")
-
-    if clicked["rent"] > avg:
-        st.error("📈 시장 대비 고가 매물")
-    else:
-        st.success("📉 시장 대비 저가 매물")
-
-else:
-    st.info("지도에서 매물을 클릭하면 AI 분석이 시작됩니다.")
+fig, ax = plt.subplots()
+ax.bar(labels, values)
+ax.set_title("경제 요인별 월세 영향")
+st.pyplot(fig)
