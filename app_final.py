@@ -4,90 +4,96 @@ import numpy as np
 import random
 import folium
 import shap
+import matplotlib.pyplot as plt
 
 from streamlit_folium import st_folium
 from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 
-# ------------------ 기본 설정 ------------------
-st.set_page_config(page_title="서울 대학가 원룸 월세 예측 AI", layout="wide")
-st.title("🏠 서울 대학가 원룸 미래 월세 예측 AI")
+# ------------------ UI 기본 설정 ------------------
+st.set_page_config(
+    page_title="Seoul Rent AI",
+    page_icon="🏠",
+    layout="wide"
+)
 
-random.seed(42)
-np.random.seed(42)
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 36px;
+        font-weight: 800;
+        margin-bottom: 10px;
+    }
+    .sub-title {
+        font-size: 16px;
+        color: gray;
+        margin-bottom: 30px;
+    }
+    .card {
+        background: #111827;
+        padding: 20px;
+        border-radius: 12px;
+        color: white;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-universities = ["서울대", "연세대", "고려대"]
+st.markdown("<div class='main-title'>🏠 Seoul Rent AI</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-title'>대학가 원룸 월세 예측 & 분석 플랫폼</div>", unsafe_allow_html=True)
 
-UNIV = {
-    "연세대": (37.5658, 126.9386),
-    "서울대": (37.4599, 126.9519),
-    "고려대": (37.5894, 127.0324)
-}
-
-# ------------------ 데이터 생성 (캐시) ------------------
+# ------------------ 데이터 생성 ------------------
 @st.cache_data
 def make_data():
+    random.seed(42)
+    np.random.seed(42)
+
     data = []
+    universities = ["서울대", "연세대", "고려대"]
 
     for i in range(3000):
-        university = random.choice(universities)
+        univ = random.choice(universities)
         area = random.randint(10, 35)
-        distance_to_univ = random.randint(0, 1000)
-        building_age = random.randint(1, 30)
+        dist = random.randint(0, 1000)
+        age = random.randint(1, 30)
         floor = random.randint(1, 10)
         month = random.randint(1, 12)
 
         semester = 1 if month in [1,2,3,8,9] else 0
+        base = 55 if univ=="연세대" else 50 if univ=="고려대" else 48
 
-        base_rent = 55 if university=="연세대" else 50 if university=="고려대" else 48
-
-        current_rent = max(
-            base_rent + area*1.2
-            - distance_to_univ*0.015
-            - building_age*0.5
-            + floor*0.8
-            + semester*6
+        current = max(
+            base + area*1.2 - dist*0.015
+            - age*0.5 + floor*0.8 + semester*6
             + np.random.normal(0,3),
             20
         )
 
-        future_rent = current_rent + semester*2 + np.random.normal(1.5,2)
+        future = current + semester*2 + np.random.normal(1.5,2)
 
-        data.append([
-            university, area, distance_to_univ, building_age,
-            floor, month, semester, current_rent, future_rent
-        ])
+        data.append([univ, area, dist, age, floor, month, semester, current, future])
 
     df = pd.DataFrame(data, columns=[
-        '대학교','면적','대학거리','건물연식','층수',
-        '월','개강시즌','현재월세','미래월세'
+        "대학교","면적","거리","연식","층","월","개강","현재","미래"
     ])
 
-    df = pd.get_dummies(df, columns=['대학교'])
+    df = pd.get_dummies(df, columns=["대학교"])
     return df
 
 
 df = make_data()
 
-X = df[
-    ['면적','대학거리','건물연식','층수','월',
-     '개강시즌','현재월세',
-     '대학교_고려대','대학교_서울대','대학교_연세대']
-]
-y = df['미래월세']
+X = df.drop(columns=["미래"])
+y = df["미래"]
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
-# ------------------ 모델 (캐시) ------------------
+# ------------------ 모델 ------------------
 @st.cache_resource
 def train_model():
     model = XGBRegressor(
         n_estimators=300,
         learning_rate=0.05,
         max_depth=6,
-        random_state=42,
         verbosity=0
     )
     model.fit(X_train, y_train)
@@ -95,140 +101,145 @@ def train_model():
 
 model = train_model()
 
-# ------------------ SHAP (캐시 + 안전 처리) ------------------
 @st.cache_resource
 def get_explainer(model):
     return shap.TreeExplainer(model)
 
 explainer = get_explainer(model)
 
-# ------------------ 가짜 매물 ------------------
+# ------------------ 대학 위치 ------------------
+UNIV = {
+    "연세대": (37.5658, 126.9386),
+    "서울대": (37.4599, 126.9519),
+    "고려대": (37.5894, 127.0324)
+}
+
+# ------------------ 매물 생성 ------------------
 @st.cache_data
 def make_rooms():
     rooms = []
-
-    for univ, (lat, lon) in UNIV.items():
-        for i in range(20):
+    for u, (lat, lon) in UNIV.items():
+        for i in range(25):
             rooms.append({
-                "매물명": f"{univ} 원룸 {i+1}",
-                "대학교": univ,
+                "name": f"{u} 원룸 {i+1}",
+                "univ": u,
                 "lat": lat + random.uniform(-0.004, 0.004),
                 "lon": lon + random.uniform(-0.004, 0.004),
-                "면적": random.randint(10,35),
-                "대학거리": random.randint(50,800),
-                "건물연식": random.randint(1,25),
-                "층수": random.randint(1,10),
-                "현재월세": random.randint(35,90)
+                "area": random.randint(10,35),
+                "dist": random.randint(50,800),
+                "age": random.randint(1,25),
+                "floor": random.randint(1,10),
+                "rent": random.randint(35,90)
             })
-
     return pd.DataFrame(rooms)
 
-rooms_df = make_rooms()
+rooms = make_rooms()
 
-# ------------------ UI ------------------
-selected_univ = st.selectbox("대학교 선택", universities)
+# ------------------ 사이드바 ------------------
+st.sidebar.header("🎯 필터")
+selected = st.sidebar.selectbox("대학교 선택", list(UNIV.keys()))
 
-filtered = rooms_df[rooms_df["대학교"] == selected_univ]
-lat, lon = UNIV[selected_univ]
+filtered = rooms[rooms["univ"] == selected]
 
-m = folium.Map(location=[lat, lon], zoom_start=15)
+# ------------------ 레이아웃 ------------------
+col1, col2 = st.columns([1.2, 1])
 
-for _, row in filtered.iterrows():
-    folium.CircleMarker(
-        location=[row["lat"], row["lon"]],
-        radius=5,
-        color="blue",
-        fill=True,
-        fill_opacity=0.7,
-        popup=row["매물명"],
-        tooltip=row["매물명"]
-    ).add_to(m)
+# ================= LEFT: MAP =================
+with col1:
+    st.subheader("📍 매물 지도")
 
-st.subheader("📍 대학 주변 매물")
-map_data = st_folium(m, width=1000, height=500, returned_objects=["last_object_clicked"])
+    lat, lon = UNIV[selected]
+    m = folium.Map(location=[lat, lon], zoom_start=15)
 
-# ------------------ 클릭 처리 ------------------
-clicked_room = None
+    for _, r in filtered.iterrows():
+        folium.CircleMarker(
+            [r["lat"], r["lon"]],
+            radius=5,
+            fill=True,
+            popup=r["name"]
+        ).add_to(m)
 
-if map_data and map_data.get("last_object_clicked"):
-    clat = map_data["last_object_clicked"]["lat"]
-    clon = map_data["last_object_clicked"]["lng"]
+    map_data = st_folium(m, height=550)
 
-    temp = filtered.copy()
-    temp["dist"] = (temp["lat"]-clat)**2 + (temp["lon"]-clon)**2
-    clicked_room = temp.sort_values("dist").iloc[0]
+# ================= RIGHT: INFO =================
+with col2:
 
-# ------------------ 예측 ------------------
-if clicked_room is not None:
+    st.subheader("📊 분석 패널")
 
-    room = clicked_room
+    clicked = None
 
-    with st.spinner("AI 분석 중..."):
+    if map_data and map_data.get("last_object_clicked"):
+        c = map_data["last_object_clicked"]
+
+        temp = filtered.copy()
+        temp["d"] = (temp["lat"]-c["lat"])**2 + (temp["lon"]-c["lng"])**2
+        clicked = temp.sort_values("d").iloc[0]
+
+    if clicked is not None:
+
+        st.markdown("### 🏢 선택 매물")
+
+        st.markdown(f"""
+        <div class="card">
+        <h4>{clicked['name']}</h4>
+        <p>현재 월세: {clicked['rent']}만원</p>
+        <p>면적: {clicked['area']}㎡</p>
+        <p>층수: {clicked['floor']}층</p>
+        <p>연식: {clicked['age']}년</p>
+        </div>
+        """, unsafe_allow_html=True)
+
         sample = pd.DataFrame({
-            '면적':[room["면적"]],
-            '대학거리':[room["대학거리"]],
-            '건물연식':[room["건물연식"]],
-            '층수':[room["층수"]],
-            '월':[8],
-            '개강시즌':[1],
-            '현재월세':[room["현재월세"]],
-            '대학교_고려대':[1 if selected_univ=="고려대" else 0],
-            '대학교_서울대':[1 if selected_univ=="서울대" else 0],
-            '대학교_연세대':[1 if selected_univ=="연세대" else 0]
+            "면적":[clicked["area"]],
+            "거리":[clicked["dist"]],
+            "연식":[clicked["age"]],
+            "층":[clicked["floor"]],
+            "월":[8],
+            "개강":[1],
+            "현재":[clicked["rent"]],
+            "대학교_고려대":[1 if selected=="고려대" else 0],
+            "대학교_서울대":[1 if selected=="서울대" else 0],
+            "대학교_연세대":[1 if selected=="연세대" else 0]
         })
 
-        future_rent = float(model.predict(sample)[0])
-        change = ((future_rent-room["현재월세"])/room["현재월세"])*100
+        pred = float(model.predict(sample)[0])
+        change = (pred - clicked["rent"]) / clicked["rent"] * 100
 
-    st.subheader("🏢 선택한 매물")
+        st.metric("📈 예측 월세", f"{pred:.1f}만원", f"{change:.1f}%")
 
-    c1, c2 = st.columns(2)
+        # ---------------- SHAP ----------------
+        st.markdown("### 🧠 AI 분석")
 
-    with c1:
-        st.write(room["매물명"])
-        st.write(f"현재 월세: {room['현재월세']}만원")
-        st.write(f"면적: {room['면적']}㎡")
-        st.write(f"층수: {room['층수']}층")
-        st.write(f"건물연식: {room['건물연식']}년")
-        st.write(f"거리: {room['대학거리']}m")
+        shap_values = explainer.shap_values(sample)[0]
 
-    with c2:
-        st.metric("예측 월세", f"{future_rent:.1f}만원", f"{change:.1f}%")
+        fig, ax = plt.subplots()
+        ax.barh(X.columns, shap_values)
+        ax.set_title("Feature Impact (SHAP)")
 
-        st.markdown("### 📌 SHAP 기반 영향 요인")
+        st.pyplot(fig)
 
-        shap_values = explainer.shap_values(sample)
+        # ---------------- 시장 비교 ----------------
+        st.markdown("### 📊 시장 비교")
 
-        shap_df = pd.DataFrame({
-            "feature": X.columns,
-            "shap": shap_values[0]
-        }).sort_values("shap", ascending=False)
+        avg = filtered["rent"].mean()
 
-        for _, r in shap_df.head(5).iterrows():
-            direction = "상승 요인" if r["shap"] > 0 else "하락 요인"
-            st.write(f"- {r['feature']} ({direction})")
+        c1, c2 = st.columns(2)
+        c1.metric("평균 월세", f"{avg:.1f}만원")
+        c2.metric("시장 대비", f"{((clicked['rent']-avg)/avg)*100:.1f}%")
 
-    st.markdown("### 📊 주변 시세 비교")
+        # ---------------- 예측 그래프 ----------------
+        st.markdown("### 📈 12개월 전망")
 
-    avg = filtered["현재월세"].mean()
-    diff = ((room["현재월세"] - avg)/avg)*100
+        months = range(1,13)
+        preds = []
 
-    col1, col2 = st.columns(2)
-    col1.metric("주변 평균", f"{avg:.1f}만원")
-    col2.metric("시장 대비", f"{diff:.1f}%", "비쌈" if diff>0 else "저렴")
+        for m in months:
+            s = sample.copy()
+            s["월"] = m
+            s["개강"] = 1 if m in [1,2,3,8,9] else 0
+            preds.append(float(model.predict(s)[0]))
 
-    st.markdown("### 📈 12개월 예측")
+        st.line_chart(pd.DataFrame({"month": months, "rent": preds}).set_index("month"))
 
-    months = list(range(1,13))
-    preds = []
-
-    base = sample.copy()
-
-    for m in months:
-        t = base.copy()
-        t["월"] = m
-        t["개강시즌"] = 1 if m in [1,2,3,8,9] else 0
-        preds.append(float(model.predict(t)[0]))
-
-    chart_df = pd.DataFrame({"month": months, "rent": preds})
-    st.line_chart(chart_df.set_index("month"))
+    else:
+        st.info("지도에서 매물을 클릭하면 분석이 시작됩니다")
