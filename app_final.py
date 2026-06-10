@@ -12,7 +12,7 @@ from streamlit_folium import st_folium
 st.set_page_config(page_title="Macro Rent Simulator", layout="wide")
 
 st.markdown("""
-<h1 style='text-align:center;'>🏠 Macro Economic Rent Simulator</h1>
+<h1 style='text-align:center;'>🏠 서울 대학가 원룸 월세 예측 모델</h1>
 <p style='text-align:center;color:gray;'>환율 · 금리 · 물가 · 수요 기반 월세 변동 시뮬레이션</p>
 """, unsafe_allow_html=True)
 
