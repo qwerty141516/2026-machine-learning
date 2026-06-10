@@ -2,151 +2,201 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import random
-import time
 import folium
+import time
+import matplotlib.pyplot as plt
 
 from streamlit_folium import st_folium
-import matplotlib.pyplot as plt
 
 # =========================
 # 🌐 CONFIG
 # =========================
-st.set_page_config(page_title="Macro Rent AI", layout="wide")
+st.set_page_config(page_title="AI Rent Simulator", layout="wide")
 
 st.markdown("""
-<h1 style='text-align:center;'>🏠 Macro Rent AI Simulator</h1>
-<p style='text-align:center;color:gray;'>금리 · 환율 · 경제 변화 기반 월세 예측</p>
+<h1 style='text-align:center;'>🏠 AI Rent + Macro Economy Simulator</h1>
+<p style='text-align:center;color:gray;'>지도 + 경제 변화 기반 월세 분석</p>
 """, unsafe_allow_html=True)
 
 # =========================
-# 🏦 MACRO SLIDERS
+# 🏫 UNIVERSITY DATA
 # =========================
-st.sidebar.header("📊 경제 변수")
+UNIV = {
+    "연세대": (37.5658, 126.9386),
+    "서울대": (37.4599, 126.9519),
+    "고려대": (37.5894, 127.0324)
+}
 
-interest = st.sidebar.slider("금리 (%)", 1.0, 6.0, 3.5, 0.1)
-inflation = st.sidebar.slider("물가 상승률 (%)", 0.0, 6.0, 2.5, 0.1)
-exchange = st.sidebar.slider("환율 (USD/KRW)", 1100, 1600, 1350, 10)
+@st.cache_data
+def make_rooms():
+    rooms = []
+    for u, (lat, lon) in UNIV.items():
+        for i in range(30):
+            rooms.append({
+                "name": f"{u} 원룸 {i+1}",
+                "univ": u,
+                "lat": lat + random.uniform(-0.004, 0.004),
+                "lon": lon + random.uniform(-0.004, 0.004),
+                "area": random.randint(10, 40),
+                "dist": random.randint(50, 900),
+                "age": random.randint(1, 25),
+                "floor": random.randint(1, 10),
+                "rent": random.randint(35, 95)
+            })
+    return pd.DataFrame(rooms)
 
-event = st.sidebar.slider("지역 경제 이벤트 (-1 ~ 1)", -1.0, 1.0, 0.0, 0.1)
-supply = st.sidebar.slider("공급 지수 (낮을수록 부족)", 0.5, 1.5, 1.0, 0.1)
+rooms = make_rooms()
 
+# =========================
+# 🏦 MACRO ECONOMY (자동 시뮬레이션)
+# =========================
 macro = {
-    "interest": interest,
-    "inflation": inflation,
-    "exchange": exchange,
-    "event": event,
-    "supply": supply
+    "interest": random.uniform(2, 5),
+    "inflation": random.uniform(1.5, 4),
+    "exchange": random.uniform(1200, 1500),
+    "event": random.uniform(-1, 1),
+    "supply": random.uniform(0.6, 1.4)
 }
 
 # =========================
-# 🏠 SAMPLE RENT DATA
+# 🧠 PRICE MODEL
 # =========================
-def base_rent():
-    return 70
-
-def predict_rent(m):
-    rent = (
-        base_rent()
-        + m["interest"] * 4
-        + (m["exchange"] - 1300) * 0.03
-        + m["inflation"] * 3
-        + m["event"] * 10
-        - m["supply"] * 12
+def predict_rent(base, macro):
+    return max(30,
+        base
+        + macro["interest"] * 4
+        + (macro["exchange"] - 1300) * 0.03
+        + macro["inflation"] * 3
+        + macro["event"] * 10
+        - macro["supply"] * 12
     )
-    return max(30, rent)
-
-current_rent = predict_rent(macro)
 
 # =========================
-# 📈 PRICE CHANGE ANIMATION
+# 📌 UI LAYOUT FIX (핵심)
 # =========================
-st.markdown("## 📊 가격 변화 시뮬레이션")
-
-history = []
-base = 65
-
-for i in range(10):
-    noise = random.uniform(-2, 2)
-    value = base + i * (current_rent - base) / 9 + noise
-    history.append(value)
-
-chart_area = st.empty()
-
-for i in range(1, len(history)+1):
-    fig, ax = plt.subplots()
-    ax.plot(range(i), history[:i], marker="o")
-    ax.set_title("월세 변화 추이")
-    ax.set_ylim(min(history)-5, max(history)+5)
-    chart_area.pyplot(fig)
-    time.sleep(0.15)
-
-# =========================
-# 📊 RESULT DASHBOARD
-# =========================
-st.markdown("## 💰 현재 분석 결과")
-
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 2])
 
 with col1:
-    st.metric("예측 월세", f"{current_rent:.1f} 만원")
+    selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 
+    st.markdown("## 📊 경제 상황 (자동)")
+    st.write(f"금리: {macro['interest']:.2f}%")
+    st.write(f"물가: {macro['inflation']:.2f}%")
+    st.write(f"환율: {macro['exchange']:.0f}")
+    st.write(f"지역 이벤트: {macro['event']:.2f}")
+    st.write(f"공급지수: {macro['supply']:.2f}")
+
+filtered = rooms[rooms["univ"] == selected]
+lat, lon = UNIV[selected]
+
+# =========================
+# 🗺 MAP (오른쪽 고정)
+# =========================
 with col2:
-    st.metric("기준 대비 변화", f"{((current_rent/base_rent())-1)*100:.1f}%")
+    m = folium.Map(location=[lat, lon], zoom_start=15, tiles="cartodbpositron")
+
+    for _, r in filtered.iterrows():
+        folium.CircleMarker(
+            location=[r["lat"], r["lon"]],
+            radius=5,
+            color="#3b82f6",
+            fill=True,
+            fill_opacity=0.8,
+            tooltip=f"{r['name']} | {r['rent']}만원"
+        ).add_to(m)
+
+    map_data = st_folium(m, height=650, width=700)
 
 # =========================
-# 🤖 GPT STYLE EXPLANATION
+# 📌 CLICK DETECTION
 # =========================
-st.markdown("## 🤖 AI 분석 리포트")
+clicked = None
 
-reason = []
+if map_data and map_data.get("last_object_clicked"):
+    c = map_data["last_object_clicked"]
 
-if interest > 4:
-    reason.append("금리 상승으로 인해 대출 부담이 증가하여 월세 상승 압력이 발생합니다.")
-
-if inflation > 3:
-    reason.append("물가 상승으로 인해 전반적인 임대료가 상승하는 구조입니다.")
-
-if exchange > 1450:
-    reason.append("환율 상승으로 외국인 수요 변화 및 투자 자금 유입 가능성이 증가합니다.")
-
-if event > 0.3:
-    reason.append("지역 개발 및 호재로 인해 수요가 증가하고 있습니다.")
-
-elif event < -0.3:
-    reason.append("지역 악재로 인해 수요 감소 압력이 존재합니다.")
-
-if supply < 0.8:
-    reason.append("공급 부족으로 인해 가격 상승 압력이 강합니다.")
-
-elif supply > 1.2:
-    reason.append("공급 과잉으로 인해 가격 하락 요인이 존재합니다.")
-
-st.markdown(f"""
-### 🧠 AI 분석 요약
-
-현재 경제 조건에서 월세는 **{current_rent:.1f}만원** 수준으로 예측됩니다.
-
-**핵심 요인:**
-""")
-
-for r in reason:
-    st.write("• " + r)
+    temp = filtered.copy()
+    temp["d"] = (temp["lat"] - c["lat"])**2 + (temp["lon"] - c["lng"])**2
+    clicked = temp.sort_values("d").iloc[0]
 
 # =========================
-# 📊 MINI CHART (ECONOMY)
+# 🚀 ANALYSIS
 # =========================
-st.markdown("## 📉 경제 변수 영향도")
+st.markdown("---")
 
-labels = ["금리", "물가", "환율", "이벤트", "공급"]
-values = [
-    interest * 4,
-    inflation * 3,
-    (exchange - 1300) * 0.03,
-    event * 10,
-    -supply * 12
-]
+if clicked is not None:
 
-fig, ax = plt.subplots()
-ax.bar(labels, values)
-ax.set_title("경제 요인별 월세 영향")
-st.pyplot(fig)
+    base_rent = clicked["rent"]
+    pred = predict_rent(base_rent, macro)
+
+    # =========================
+    # 📊 PRICE ANIMATION
+    # =========================
+    st.markdown("## 📈 가격 변화 시뮬레이션")
+
+    history = np.linspace(base_rent, pred, 12)
+
+    chart = st.empty()
+
+    for i in range(2, len(history)):
+        fig, ax = plt.subplots()
+        ax.plot(history[:i], marker="o")
+        ax.set_ylim(min(history)-5, max(history)+5)
+        ax.set_title("월세 변화 (경제 충격 반영)")
+        chart.pyplot(fig)
+        time.sleep(0.1)
+
+    # =========================
+    # 💰 RESULT
+    # =========================
+    colA, colB = st.columns(2)
+
+    with colA:
+        st.metric("현재 월세", f"{base_rent}만원")
+
+    with colB:
+        st.metric("예측 월세", f"{pred:.1f}만원")
+
+    # =========================
+    # 🤖 GPT STYLE EXPLANATION
+    # =========================
+    st.markdown("## 🤖 AI 설명")
+
+    reasons = []
+
+    if macro["interest"] > 4:
+        reasons.append("금리 상승 → 대출 부담 증가 → 월세 상승 압력")
+
+    if macro["inflation"] > 3:
+        reasons.append("물가 상승 → 전체 임대료 상승 구조")
+
+    if macro["exchange"] > 1400:
+        reasons.append("환율 상승 → 외국인 수요 증가 가능성")
+
+    if macro["event"] > 0.3:
+        reasons.append("지역 호재 → 수요 증가")
+
+    if macro["event"] < -0.3:
+        reasons.append("지역 악재 → 수요 감소")
+
+    if macro["supply"] < 0.8:
+        reasons.append("공급 부족 → 가격 상승 압력")
+
+    if macro["supply"] > 1.2:
+        reasons.append("공급 과잉 → 가격 하락 압력")
+
+    st.markdown(f"""
+    ### 🧠 AI 분석 결과
+
+    선택 매물 기준:
+    - 현재 월세: **{base_rent}만원**
+    - 예측 월세: **{pred:.1f}만원**
+
+    **왜 이렇게 변했나?**
+    """)
+
+    for r in reasons:
+        st.write("• " + r)
+
+else:
+    st.info("지도에서 매물을 클릭하면 분석이 시작됩니다.")
