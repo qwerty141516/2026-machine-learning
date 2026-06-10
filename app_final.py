@@ -39,19 +39,14 @@ st.markdown("""
     border-radius:14px;
     color:white;
 }
-
-/* 지도 완전 중앙 정렬 */
-iframe {
-    width: 100% !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# 🏷️ TITLE (변경됨)
+# 🏷️ TITLE
 # =========================
 st.markdown("<div class='title'>🏠 서울 주요 대학 근처 월세 예측</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub'>금리·수요·공급 기반 실제 월세 변동 시뮬레이션</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub'>금리·수요·공급 기반 AI 월세 시뮬레이션</div>", unsafe_allow_html=True)
 
 # =========================
 # 🏫 UNIVERSITY
@@ -143,42 +138,41 @@ def make_rooms():
 rooms = make_rooms()
 
 # =========================
-# 🎯 UI (선택 + 지도 정렬 핵심 수정)
+# 🎯 UNIVERSITY SELECT
 # =========================
 selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 
-# 선택 영역 + 지도 한 컨테이너로 묶어서 정렬
-container = st.container()
-
-with container:
-
-    filtered = rooms[rooms["univ"] == selected]
-
-    # =========================
-    # 🗺️ MAP
-    # =========================
-    lat, lon = UNIV[selected]
-    m = folium.Map(location=[lat, lon], zoom_start=15)
-
-    for _, r in filtered.iterrows():
-        folium.CircleMarker(
-            [r["lat"], r["lon"]],
-            radius=5,
-            fill=True,
-            tooltip=r["name"]
-        ).add_to(m)
-
-    map_data = st_folium(m, height=600, width=1100)
+filtered = rooms[rooms["univ"] == selected]
 
 # =========================
-# 🌍 ECONOMIC ENGINE
+# 🗺️ MAP (선택 강조)
+# =========================
+lat, lon = UNIV[selected]
+m = folium.Map(location=[lat, lon], zoom_start=15)
+
+map_data = st_folium(m, height=600, width=1100)
+
+# =========================
+# 📌 CLICK DETECTION
+# =========================
+clicked = None
+
+if map_data and map_data.get("last_object_clicked"):
+
+    with st.spinner("🧠 AI가 해당 매물을 분석 중입니다..."):
+        c = map_data["last_object_clicked"]
+
+        temp = filtered.copy()
+        temp["d"] = (temp["lat"]-c["lat"])**2 + (temp["lon"]-c["lng"])**2
+        clicked = temp.sort_values("d").iloc[0]
+
+# =========================
+# 🌍 ECONOMIC MODEL
 # =========================
 def market_shift(month, age, dist):
-
     shift = 0
 
-    interest_rate = 1.8
-    shift -= interest_rate
+    shift -= 1.8  # 금리
 
     if month in [2,3,8,9]:
         shift += 3.2
@@ -195,23 +189,14 @@ def market_shift(month, age, dist):
     elif dist > 700:
         shift -= 1
 
-    shift += 1.0
-
+    shift += 1.0  # 인플레이션
     return shift
 
 # =========================
-# 📌 CLICK ANALYSIS
+# 📍 ANALYSIS SECTION
 # =========================
 st.markdown("---")
-
-clicked = None
-
-if map_data and map_data.get("last_object_clicked"):
-    c = map_data["last_object_clicked"]
-
-    temp = filtered.copy()
-    temp["d"] = (temp["lat"]-c["lat"])**2 + (temp["lon"]-c["lng"])**2
-    clicked = temp.sort_values("d").iloc[0]
+st.markdown("<div id='analysis'></div>", unsafe_allow_html=True)
 
 # =========================
 # 🧠 RESULT
@@ -232,38 +217,84 @@ if clicked is not None:
     })
 
     base_price = model.predict(sample)[0]
-
     shift = market_shift(8, clicked["age"], clicked["dist"])
-
     future_price = base_price * (1 + shift/100)
 
     change = (future_price - clicked["rent"]) / clicked["rent"] * 100
 
+    avg_rent = filtered["rent"].mean()
+
+    # 자동 스크롤
+    st.markdown("""
+    <script>
+        document.getElementById("analysis").scrollIntoView({behavior: "smooth"});
+    </script>
+    """, unsafe_allow_html=True)
+
+    # =========================
+    # 🤖 GPT 스타일 설명
+    # =========================
+    st.markdown("## 🤖 AI 분석 리포트")
+
+    st.markdown(f"""
+이 매물은 단순히 가격이 오르는/내리는 구조가 아니라,
+**입지 + 수요 시즌 + 금리 + 노후도 + 거리 변수**가 결합된 결과입니다.
+
+---
+
+📍 현재 월세: **{clicked['rent']}만원**  
+📊 AI 예측 미래 월세: **{future_price:.1f}만원**
+
+---
+
+### 🔍 가격 변화 해석
+
+이 매물의 가격 변화는 다음과 같이 해석됩니다:
+
+- 💰 금리 효과: 기준 금리 상승 압력으로 -1.8%
+- 🎓 계절 수요: 개강 시즌 영향으로 +수요 폭발 (+3.2%)
+- 🏗️ 노후도: 건물 상태에 따라 ± 영향 반영
+- 🚶 거리 효과: 역/대학 접근성이 핵심 변수
+- 📈 시장 인플레이션: 전체적으로 +1.0% 상승 압력
+
+---
+
+### ⚖️ 주변 대비 위치
+
+- 이 매물 평균 월세: **{avg_rent:.1f}만원**
+- 시장 대비 차이: **{((clicked['rent']-avg_rent)/avg_rent*100):.1f}%**
+
+👉 즉, 이 매물은 시장 평균 대비 
+{"고가 프리미엄" if clicked['rent'] > avg_rent else "저평가 구간"}에 위치합니다.
+""")
+
+    # =========================
+    # 📊 RESULT CARD
+    # =========================
     st.markdown(f"""
     <div class="card">
         📍 미래 월세: <b>{future_price:.1f}만원</b><br>
-        현재 → 변화: {change:.1f}%
+        변화율: {change:.1f}%
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("### 🌍 경제 변수 분석")
-    st.write(f"💰 금리 영향: -1.8%")
-    st.write(f"🎓 수요 시즌 영향: +3.2%")
-    st.write(f"🏗️ 공급 영향: 변동 반영")
-    st.write(f"🚶 입지 영향: 자동 반영")
-    st.write(f"📈 인플레이션: +1.0%")
-
+    # =========================
+    # 📊 MARKET STATE
+    # =========================
     total_shift = shift
 
-    st.markdown("### 📊 총 시장 변화")
+    st.markdown("### 📊 시장 상태")
 
     if total_shift > 3:
         st.success("📈 강한 상승 시장")
     elif total_shift > 0:
         st.info("📊 완만한 상승 시장")
     else:
-        st.warning("📉 하락 또는 조정 시장")
+        st.warning("📉 조정 또는 하락 시장")
 
+    # =========================
+    # 🧠 SCORE
+    # =========================
     score = 50
     if clicked["dist"] < 300: score += 20
     if clicked["age"] < 5: score += 15
@@ -272,14 +303,17 @@ if clicked is not None:
 
     st.metric("🧠 투자 점수", f"{score}/100")
 
+    # =========================
+    # 🎯 DECISION
+    # =========================
     st.markdown("### ⏳ 투자 판단")
 
     if change > 5 and score > 70:
-        st.success("👉 지금 매수 (상승 사이클 진입)")
+        st.success("👉 지금 매수 (상승 사이클)")
     elif change > 0:
         st.info("👉 보유 또는 관망")
     else:
-        st.warning("👉 대기 전략 추천")
+        st.warning("👉 진입 보류")
 
 else:
-    st.info("지도에서 매물을 클릭하면 경제 시뮬레이션이 시작됩니다")
+    st.info("지도에서 매물을 클릭하면 AI 분석이 시작됩니다.")
