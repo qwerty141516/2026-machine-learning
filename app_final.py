@@ -3,9 +3,7 @@ import pandas as pd
 import numpy as np
 import random
 import folium
-import time
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 
 from streamlit_folium import st_folium
 
@@ -16,21 +14,8 @@ st.set_page_config(page_title="AI Rent Simulator", layout="wide")
 
 st.markdown("""
 <h1 style='text-align:center;'>🏠 AI Rent Simulator</h1>
-<p style='text-align:center;color:gray;'>경제 기반 월세 시뮬레이션</p>
+<p style='text-align:center;color:gray;'>경제 기반 월세 분석 시스템</p>
 """, unsafe_allow_html=True)
-
-# =========================
-# 🎨 FONT FIX (핵심)
-# =========================
-font_path = "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"
-
-try:
-    font = fm.FontProperties(fname=font_path)
-    plt.rcParams['font.family'] = font.get_name()
-except:
-    plt.rcParams['font.family'] = "DejaVu Sans"
-
-plt.rcParams['axes.unicode_minus'] = False
 
 # =========================
 # 🏫 DATA
@@ -62,7 +47,7 @@ def make_rooms():
 rooms = make_rooms()
 
 # =========================
-# 🏫 UI LAYOUT
+# 🏫 UI
 # =========================
 col1, col2 = st.columns([1, 2])
 
@@ -111,12 +96,12 @@ if clicked is not None:
 
     base = clicked["rent"]
 
-    # 경제 기반 시뮬레이션 (간단 모델)
+    # 경제 시뮬레이션 (단순)
     macro_score = random.uniform(-1, 1)
     pred = base + macro_score * 15
 
     # =========================
-    # 📈 GRAPH (한글 정상)
+    # 📊 GRAPH (텍스트 완전 제거)
     # =========================
     st.markdown("### 📊 가격 변화 시뮬레이션")
 
@@ -124,10 +109,14 @@ if clicked is not None:
 
     fig, ax = plt.subplots(figsize=(6, 3))
     ax.plot(history, marker="o")
-    ax.set_title("월세 변화 시뮬레이션")
-    ax.set_xlabel("시간")
-    ax.set_ylabel("월세 (만원)")
-    ax.grid(True)
+
+    # 👉 글자 전부 제거
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    ax.set_title("")
+    ax.set_xlabel("")
+    ax.set_ylabel("")
 
     st.pyplot(fig)
 
@@ -143,7 +132,7 @@ if clicked is not None:
         st.metric("예측 월세", f"{pred:.1f}만원")
 
     # =========================
-    # 🤖 GPT STYLE AI REPORT
+    # 🤖 AI REPORT (GPT STYLE 유지)
     # =========================
     st.markdown("## 🤖 AI 분석 리포트")
 
@@ -156,21 +145,21 @@ color:white;
 line-height:1.7;
 ">
 
-현재 선택된 매물은 {selected} 인근 지역에 위치한 원룸이며,<br><br>
+현재 선택된 매물은 {selected} 인근 원룸이며,<br><br>
 
 현재 월세는 <b>{base}만원</b>,
-경제 환경을 반영한 예상 월세는 <b>{pred:.1f}만원</b>으로 분석됩니다.<br><br>
+경제 상황을 반영한 예상 월세는 <b>{pred:.1f}만원</b>으로 분석됩니다.<br><br>
 
-<b>📌 AI 핵심 분석:</b><br>
+<b>📌 분석 내용:</b><br>
 
-• 이 매물의 가격은 단순 위치가 아니라 거시경제 흐름의 영향을 받고 있습니다.<br>
-• 시장 변동성이 증가하면 임대료 민감도가 함께 상승합니다.<br>
-• 투자 심리, 금리 변화, 유동성 변화가 복합적으로 작용합니다.<br>
-• 단기적으로는 가격 변동성이 존재하지만 장기적으로는 균형으로 수렴합니다.<br><br>
+• 시장의 변동성에 따라 임대료 민감도가 증가한 상태입니다.<br>
+• 금리, 유동성, 투자 심리 등이 가격 형성에 영향을 주고 있습니다.<br>
+• 단기적으로 가격 변동성이 존재하는 구간입니다.<br>
+• 장기적으로는 공급과 수요 균형으로 수렴할 가능성이 있습니다.<br><br>
 
 <b>🧠 AI 해석:</b><br>
-현재 시장은 안정 구간보다는 조정/변동 구간에 가까우며,<br>
-향후 경제 지표 변화에 따라 추가 상승 또는 하락 가능성이 모두 존재합니다.
+현재 시장은 안정 구간보다는 조정 구간에 가까우며,<br>
+향후 경제 변화에 따라 추가 상승 또는 하락 가능성이 모두 존재합니다.
 
 </div>
 """
