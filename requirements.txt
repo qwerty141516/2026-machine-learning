@@ -7,3 +7,4 @@ shap
 folium
 streamlit-folium
 matplotlib
+koreanize-matplotlib
