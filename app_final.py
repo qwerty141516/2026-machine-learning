@@ -9,15 +9,15 @@ from streamlit_folium import st_folium
 # =========================
 # 🌐 CONFIG
 # =========================
-st.set_page_config(page_title="AI Rent Simulator", layout="wide")
+st.set_page_config(page_title="Macro Rent Simulator", layout="wide")
 
 st.markdown("""
-<h1 style='text-align:center;'>🏠 AI Rent Simulator</h1>
-<p style='text-align:center;color:gray;'>경제 기반 월세 분석 시스템</p>
+<h1 style='text-align:center;'>🏠 Macro Economic Rent Simulator</h1>
+<p style='text-align:center;color:gray;'>환율 · 금리 · 물가 · 수요 기반 월세 변동 시뮬레이션</p>
 """, unsafe_allow_html=True)
 
 # =========================
-# 🏫 DATA
+# 🏫 UNIVERSITY DATA
 # =========================
 UNIV = {
     "연세대": (37.5658, 126.9386),
@@ -35,15 +35,35 @@ def make_rooms():
                 "univ": u,
                 "lat": lat + random.uniform(-0.004, 0.004),
                 "lon": lon + random.uniform(-0.004, 0.004),
-                "area": random.randint(10, 40),
-                "dist": random.randint(50, 900),
-                "age": random.randint(1, 25),
-                "floor": random.randint(1, 10),
-                "rent": random.randint(35, 95)
+                "rent": random.randint(40, 90)
             })
     return pd.DataFrame(rooms)
 
 rooms = make_rooms()
+
+# =========================
+# 🌍 MACRO ECONOMY (가상 생성)
+# =========================
+macro = {
+    "interest": round(random.uniform(2.0, 6.0), 2),   # 금리
+    "exchange": round(random.uniform(1200, 1550), 0), # 환율
+    "inflation": round(random.uniform(1.0, 5.0), 2),  # 물가
+    "demand": round(random.uniform(0.7, 1.3), 2),     # 수요
+    "supply": round(random.uniform(0.7, 1.3), 2)      # 공급
+}
+
+# =========================
+# 🧠 PRICE MODEL (핵심)
+# =========================
+def predict_rent(base, m):
+    return max(20,
+        base
+        + (m["interest"] - 3) * 6
+        + (m["exchange"] - 1300) * 0.02
+        + (m["inflation"] - 2) * 5
+        + (m["demand"] - 1) * 15
+        - (m["supply"] - 1) * 15
+    )
 
 # =========================
 # 🏫 UI
@@ -52,6 +72,13 @@ col1, col2 = st.columns([1, 2])
 
 with col1:
     selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
+
+    st.markdown("## 🌍 가상 경제 상태")
+    st.write(f"📈 금리: {macro['interest']}%")
+    st.write(f"💱 환율: {macro['exchange']}")
+    st.write(f"📊 물가: {macro['inflation']}%")
+    st.write(f"🏙 수요: {macro['demand']}")
+    st.write(f"🏗 공급: {macro['supply']}")
 
 filtered = rooms[rooms["univ"] == selected]
 lat, lon = UNIV[selected]
@@ -94,10 +121,7 @@ st.markdown("---")
 if clicked is not None:
 
     base = clicked["rent"]
-
-    # 경제 기반 시뮬레이션
-    macro_score = random.uniform(-1, 1)
-    pred = base + macro_score * 15
+    pred = predict_rent(base, macro)
 
     # =========================
     # 💰 RESULT
@@ -111,9 +135,9 @@ if clicked is not None:
         st.metric("예측 월세", f"{pred:.1f}만원")
 
     # =========================
-    # 🤖 AI REPORT
+    # 🤖 AI EXPLANATION (긴 GPT 스타일)
     # =========================
-    st.markdown("## 🤖 AI 분석 리포트")
+    st.markdown("## 🤖 AI 경제 분석 리포트")
 
     explanation = f"""
 <div style="
@@ -124,21 +148,26 @@ color:white;
 line-height:1.7;
 ">
 
-현재 선택된 매물은 {selected} 인근 지역에 위치한 원룸이며,<br><br>
+현재 선택된 매물은 {selected} 인근 원룸이며,<br><br>
 
 현재 월세는 <b>{base}만원</b>,
-경제 환경을 반영한 예상 월세는 <b>{pred:.1f}만원</b>으로 분석됩니다.<br><br>
+거시경제 조건을 반영한 예상 월세는 <b>{pred:.1f}만원</b>입니다.<br><br>
 
-<b>📌 핵심 분석:</b><br>
+<b>🌍 경제 변수 분석:</b><br>
 
-• 이 매물의 가격은 단순 위치가 아니라 거시경제 흐름의 영향을 받고 있습니다.<br>
-• 시장 변동성이 증가하면 임대료 민감도가 함께 상승합니다.<br>
-• 금리, 유동성, 투자 심리 등이 복합적으로 작용합니다.<br>
-• 단기적으로는 가격 변동성이 존재하는 구간입니다.<br><br>
+• 금리 {macro['interest']}%는 대출 비용 증가로 이어져 월세 상승 압력을 형성합니다.<br>
+• 환율 {macro['exchange']}은 외국 자본 흐름과 투자 심리에 영향을 줍니다.<br>
+• 물가 상승률 {macro['inflation']}%는 전체 임대료 수준을 끌어올립니다.<br>
+• 수요 지수 {macro['demand']}는 해당 지역 선호도를 의미합니다.<br>
+• 공급 지수 {macro['supply']}는 시장 포화도를 나타냅니다.<br><br>
 
 <b>🧠 AI 해석:</b><br>
-현재 시장은 안정 구간보다는 조정 구간에 가까우며,<br>
-향후 경제 지표 변화에 따라 추가 상승 또는 하락 가능성이 존재합니다.
+
+현재 시장은 단순한 부동산 요인이 아니라 거시경제 충격이 함께 작용하는 상태입니다.<br>
+특히 금리와 공급 구조 변화가 가격 형성의 핵심 변수이며,<br>
+단기적으로는 변동성이 높은 시장 환경입니다.<br><br>
+
+따라서 해당 매물은 향후 경제 지표 변화에 따라 추가 상승 또는 조정 가능성이 모두 존재합니다.
 
 </div>
 """
