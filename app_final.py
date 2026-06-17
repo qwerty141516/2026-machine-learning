@@ -7,6 +7,10 @@ import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestRegressor
 
+# 한글 폰트 설정 (Matplotlib 깨짐 방지 - 시스템에 따라 나눔고딕 등 지정 필요)
+plt.rcParams['font.family'] = 'Malgun Gothic' # Windows용 (Mac은 'AppleGothic')
+plt.rcParams['axes.unicode_minus'] = False
+
 st.set_page_config(page_title="서울 대학가 원룸 월세 예측 모델", layout="wide")
 
 st.markdown("""
@@ -169,7 +173,7 @@ with col2:
     m = folium.Map(location=[lat, lon], zoom_start=15)
 
     folium.Marker([lat, lon], tooltip=selected,
-                  icon=folium.Icon(color="red")).add_to(m)
+                 icon=folium.Icon(color="red")).add_to(m)
 
     for _, r in filtered.iterrows():
         folium.CircleMarker(
@@ -232,14 +236,27 @@ if clicked is not None:
 - 보증금: {clicked['deposit']}만원
 """)
 
-    st.subheader("📈 미래 예측")
+    st.subheader("📈 미래 예측 (6개월)")
 
-    future = [pred + random.uniform(-2, 2) + i*0.4 for i in range(6)]
+    # 💡 [개선 사항] 무작위 난수 대신 머신러닝 모델을 사용한 미래 시나리오 예측
+    future_predictions = []
+    
+    # 향후 6개월 동안 매달 금리가 0.1%씩 오르고 물가(인플레)가 0.05%씩 오르는 시나리오 가정
+    for i in range(1, 7):
+        future_feature = feature.copy()
+        future_feature["interest"] += i * 0.1     # 금리 변동 반영
+        future_feature["inflation"] += i * 0.05   # 물가 변동 반영
+        
+        # 수정된 미래 경제 변수로 ML 모델 예측 수행
+        future_pred = predict(future_feature)
+        future_predictions.append(future_pred)
 
-    fig, ax = plt.subplots()
-    ax.plot(range(1,7), future, marker="o")
-    ax.set_xlabel("개월")
-    ax.set_ylabel("월세")
+    fig, ax = plt.subplots(figsize=(7, 3))
+    ax.plot(range(1, 7), future_predictions, marker="o", color="#1f77b4", linewidth=2)
+    ax.set_xlabel("개월 뒤")
+    ax.set_ylabel("예측 월세 (만원)")
+    ax.set_xticks(range(1, 7))
+    ax.grid(True, linestyle="--", alpha=0.6)
     st.pyplot(fig)
 
     st.subheader("🤖 AI 설명")
