@@ -75,7 +75,7 @@ else:
     macro = {"interest": 3.5, "exchange": 1515, "inflation": 2.5, "demand": 1.0, "supply": 1.0}
 
 # =========================
-# 🤖 머신러닝 학습 데이터 생성
+# 🤖 머신러닝 학습 데이터 생성 - 🛠 현실적 상하한선 보정 추가
 # =========================
 @st.cache_data
 def make_ml_data(df):
@@ -90,20 +90,28 @@ def make_ml_data(df):
             demand = random.uniform(0.2, 2.2)
             supply = random.uniform(0.2, 2.2)
 
+            # 가중치 계산
             rent = (
                 r["rent"]
-                + (interest - 3.5) * 15       
-                - (exchange - 1515) * 0.1     
-                + (inflation - 2.5) * 12       
-                + (demand - 1.0) * 55         
-                - (supply - 1.0) * 45         
+                + (interest - 3.5) * 6       # 현실적인 변동폭으로 소폭 조정
+                - (exchange - 1515) * 0.05    
+                + (inflation - 2.5) * 5       
+                + (demand - 1.0) * 25         
+                - (supply - 1.0) * 20         
 
                 + (r["jeonse_ratio"] * 0.01)
-                + (r["walk"] * -0.7)
+                + (r["walk"] * -0.5)
                 + (r["size"] * 0.5)
 
                 + random.uniform(-1, 1)
             )
+
+            # 🛠 [핵심 수정] 월세가 말도 안 되게 튀는 것을 방지 (최소 30만 원 ~ 최대 125만 원 제한)
+            # 경기침체여도 최소 30만 원은 유지하고, 호황기여도 강남 타워팰리스 수준이 되지 않도록 125만 원에서 커트합니다.
+            if rent < 30:
+                rent = random.uniform(30, 38)
+            elif rent > 125:
+                rent = random.uniform(115, 125)
 
             data.append([
                 r["size"],
@@ -249,21 +257,18 @@ if clicked is not None:
             """)
         
         with col_info2:
-            # 🛠 [신규 추가] 머신러닝 예측 기반 AI 자연어 요약 시스템
             st.subheader("🤖 AI 매물 진단 보고서")
             
-            # 매물 가격 수준 진단
             price_eval = "현재 이 매물은 주변 평균 대비 유사하거나 적정 수준입니다."
             if diff > 5:
                 price_eval = "현재 매물 가격이 주변 평균 원룸 시세보다 다소 높게 책정되어 있습니다."
             elif diff < -5:
                 price_eval = "현재 매물 가격이 주변 평균 원룸 시세 대비 저렴한 편으로 메리트가 있습니다."
                 
-            # 시나리오별 설명 동적 생성
             if scenario == "경기호황":
-                macro_eval = f"특히 현재 **{scenario}** 상황으로 인해 대학가 유입 수요({macro['demand']}x)가 폭발하고 공급({macro['supply']}x)이 부족한 상태입니다. 고금리와 고물가 기조까지 더해져, 머신러닝 모델은 이 매물의 적정 월세를 현재 단가보다 높은 **{pred:.1f}만원** 선까지 상향 예측하고 있습니다."
+                macro_eval = f"특히 현재 **{scenario}** 상황으로 인해 대학가 유입 수요({macro['demand']}x)가 폭발하고 공급({macro['supply']}x)이 부족한 상태입니다. 고금리와 고물가 기조까지 더해져, 머신러닝 모델은 이 매물의 적정 월세를 호황기 프리미엄이 붙은 **{pred:.1f}만원** 선으로 상향 예측하고 있습니다."
             elif scenario == "경기침체":
-                macro_eval = f"반면 현재 **{scenario}** 상황에서는 대학가 인구 수요({macro['demand']}x)가 급감하고 매물 공급({macro['supply']}x)이 과잉되어 시장이 위축되어 있습니다. 이에 따라 머신러닝 모델은 이 방의 미래 가치를 대폭 낮춘 **{pred:.1f}만원** 선으로 하향 진단했습니다."
+                macro_eval = f"반면 현재 **{scenario}** 상황에서는 대학가 인구 수요({macro['demand']}x)가 급감하고 매물 공급({macro['supply']}x)이 과잉되어 시장이 위축되어 있습니다. 이에 따라 머신러닝 모델은 이 방의 미래 가치를 하락 안정세인 **{pred:.1f}만원** 선으로 하향 진단했습니다."
             else:
                 macro_eval = f"안정적인 **{scenario}** 경제 지표 아래에서 머신러닝 모델이 예측한 적정 월세는 **{pred:.1f}만원**입니다. 급격한 시세 변동 우려는 적은 편입니다."
 
@@ -274,18 +279,21 @@ if clicked is not None:
         for i in range(1, 7):
             future_feature = feature.copy()
             if scenario == "경기호황":
-                future_feature["interest"] += i * 0.15     
-                future_feature["inflation"] += i * 0.1
-                future_feature["exchange"] -= i * 15       
+                future_feature["interest"] += i * 0.05     
+                future_feature["inflation"] += i * 0.03
+                future_feature["exchange"] -= i * 5       
             elif scenario == "경기침체":
-                future_feature["interest"] -= i * 0.1      
-                future_feature["inflation"] -= i * 0.05
-                future_feature["exchange"] += i * 20       
+                future_feature["interest"] -= i * 0.05      
+                future_feature["inflation"] -= i * 0.02
+                future_feature["exchange"] += i * 5       
             else:
-                future_feature["interest"] += i * 0.05
-                future_feature["inflation"] += i * 0.02
+                future_feature["interest"] += i * 0.02
+                future_feature["inflation"] += i * 0.01
 
             future_pred = predict(future_feature)
+            
+            # 미래 예측치도 그래프 상에서 30~125 범위를 벗어나지 않도록 안전장치
+            future_pred = max(30.0, min(125.0, future_pred))
             future_predictions.append(future_pred)
 
         fig, ax = plt.subplots(figsize=(7, 2.5))
@@ -308,7 +316,7 @@ if clicked is not None:
         with c_col2:
             st.checkbox("🔌 옵션 상태 (에어컨, 세탁기, 냉장고 정상 작동 여부)")
             st.checkbox("🔒 보안 인프라 (공동현관 도어락, 주변 CCTV 위치 확인)")
-            st.checkbox("💧 수압/보일러 (온수가 끊김 없이 잘 나오는지)")
+            st.checkbox("🔒 수압/보일러 (온수가 끊김 없이 잘 나오는지)")
 
     with tab3:
         st.subheader("💡 방 구하기 전 필수 체크 법률/금융 가이드")
