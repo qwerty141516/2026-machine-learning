@@ -75,7 +75,7 @@ else:
     macro = {"interest": 3.5, "exchange": 1515, "inflation": 2.5, "demand": 1.0, "supply": 1.0}
 
 # =========================
-# 🤖 머신러닝 학습 데이터 생성 - 🛠 현실적 상하한선 보정 추가
+# 🤖 머신러닝 학습 데이터 생성
 # =========================
 @st.cache_data
 def make_ml_data(df):
@@ -90,10 +90,9 @@ def make_ml_data(df):
             demand = random.uniform(0.2, 2.2)
             supply = random.uniform(0.2, 2.2)
 
-            # 가중치 계산
             rent = (
                 r["rent"]
-                + (interest - 3.5) * 6       # 현실적인 변동폭으로 소폭 조정
+                + (interest - 3.5) * 6       
                 - (exchange - 1515) * 0.05    
                 + (inflation - 2.5) * 5       
                 + (demand - 1.0) * 25         
@@ -103,11 +102,10 @@ def make_ml_data(df):
                 + (r["walk"] * -0.5)
                 + (r["size"] * 0.5)
 
-                + random.uniform(-1, 1)
+                # 🛠 머신러닝 모델이 너무 완벽하게 정답을 맞추지 못하도록 현실적 오차(Noise) 범위 확대
+                + random.uniform(-6, 6) 
             )
 
-            # 🛠 [핵심 수정] 월세가 말도 안 되게 튀는 것을 방지 (최소 30만 원 ~ 최대 125만 원 제한)
-            # 경기침체여도 최소 30만 원은 유지하고, 호황기여도 강남 타워팰리스 수준이 되지 않도록 125만 원에서 커트합니다.
             if rent < 30:
                 rent = random.uniform(30, 38)
             elif rent > 125:
@@ -231,16 +229,23 @@ if clicked is not None:
 
     pred = predict(feature)
 
-    avg = filtered["rent"].mean()
-    diff = clicked["rent"] - avg
-
-    score = max(50, min(100, int(100 - abs(diff)*1.5)))
+    # 🛠 [AI 점수 로직 전면 수정]
+    # 단순히 '예측치와 원래 가격의 차이'로만 계산하면 늘 99점이 나오므로,
+    # '현재 시나리오에서의 예측 적정가(pred)' 대비 '해당 매물의 원래 가격(clicked["rent"])'이 얼마나 가성비 있는지 평가하는 로직으로 변경했습니다.
+    # 예측가보다 원래 월세가 저렴하면 점수가 높고, 시나리오 예측가보다 터무니없이 비싸면 점수가 깎입니다.
+    price_gap = clicked["rent"] - pred
+    
+    # 기본 85점을 기준으로 잡고 가성비 우수 시 보너스, 바가지 매물일 시 감점 처리
+    raw_score = 85 - (price_gap * 2.0)
+    
+    # 60점~98점 사이에서 다채롭게 움직이도록 제한 (보통 시나리오에서는 80점대, 호황/침체 및 매물 특성에 따라 60~90점대 분산)
+    score = max(60, min(98, int(raw_score)))
 
     c1, c2, c3 = st.columns(3)
 
     c1.metric("현재 매물 원래 월세", f"{clicked['rent']}만원")
-    c2.metric("ML 예측 월세", f"{pred:.1f}만원")
-    c3.metric("AI 점수", f"{score}점")
+    c2.metric("ML 예측 적정 월세", f"{pred:.1f}만원")
+    c3.metric("AI 추천 점수", f"{score}점")
 
     tab1, tab2, tab3 = st.tabs(["📊 ML 분석 & 예측", "📝 매물 방문 체크리스트", "💡 원룸 계약 필수 상식"])
 
@@ -259,18 +264,20 @@ if clicked is not None:
         with col_info2:
             st.subheader("🤖 AI 매물 진단 보고서")
             
-            price_eval = "현재 이 매물은 주변 평균 대비 유사하거나 적정 수준입니다."
-            if diff > 5:
-                price_eval = "현재 매물 가격이 주변 평균 원룸 시세보다 다소 높게 책정되어 있습니다."
-            elif diff < -5:
-                price_eval = "현재 매물 가격이 주변 평균 원룸 시세 대비 저렴한 편으로 메리트가 있습니다."
+            # 점수 기반 매물 평가 멘트 동적 최적화
+            if score >= 90:
+                price_eval = "💡 이 매물은 현재 경제 시나리오 예측가 대비 월세가 저렴하여 **가성비가 매우 뛰어난 매물**로 추천합니다."
+            elif score <= 70:
+                price_eval = "⚠️ 이 매물은 현재 거시경제 지표 및 예측가 대비 월세가 과도하게 높게 책정된 **고평가(거품) 매물**일 가능성이 큽니다."
+            else:
+                price_eval = "⚖️ 이 매물은 현재 시장 트렌드와 모델 예측치에 부합하는 **적정 가격 선의 매물**입니다."
                 
             if scenario == "경기호황":
-                macro_eval = f"특히 현재 **{scenario}** 상황으로 인해 대학가 유입 수요({macro['demand']}x)가 폭발하고 공급({macro['supply']}x)이 부족한 상태입니다. 고금리와 고물가 기조까지 더해져, 머신러닝 모델은 이 매물의 적정 월세를 호황기 프리미엄이 붙은 **{pred:.1f}만원** 선으로 상향 예측하고 있습니다."
+                macro_eval = f"현재 **{scenario}** 상황으로 인해 대학가 유입 수요가 폭발하고 공급이 부족한 상태입니다. 모델은 이 매물의 적정 월세를 호황기 프리미엄이 붙은 **{pred:.1f}만원** 선으로 바라보고 있습니다."
             elif scenario == "경기침체":
-                macro_eval = f"반면 현재 **{scenario}** 상황에서는 대학가 인구 수요({macro['demand']}x)가 급감하고 매물 공급({macro['supply']}x)이 과잉되어 시장이 위축되어 있습니다. 이에 따라 머신러닝 모델은 이 방의 미래 가치를 하락 안정세인 **{pred:.1f}만원** 선으로 하향 진단했습니다."
+                macro_eval = f"반면 현재 **{scenario}** 상황에서는 대학가 인구 수요가 급감하고 매물 공급이 과잉되어 시장이 위축되어 있습니다. 이에 따라 모델은 이 방의 적정 가치를 하락 안정세인 **{pred:.1f}만원** 선으로 진단했습니다."
             else:
-                macro_eval = f"안정적인 **{scenario}** 경제 지표 아래에서 머신러닝 모델이 예측한 적정 월세는 **{pred:.1f}만원**입니다. 급격한 시세 변동 우려는 적은 편입니다."
+                macro_eval = f"안정적인 **{scenario}** 경제 지표 아래에서 머신러닝 모델이 예측한 적정 월세는 **{pred:.1f}만원**입니다."
 
             st.write(f"📝 {price_eval} {macro_eval}")
 
@@ -291,8 +298,6 @@ if clicked is not None:
                 future_feature["inflation"] += i * 0.01
 
             future_pred = predict(future_feature)
-            
-            # 미래 예측치도 그래프 상에서 30~125 범위를 벗어나지 않도록 안전장치
             future_pred = max(30.0, min(125.0, future_pred))
             future_predictions.append(future_pred)
 
