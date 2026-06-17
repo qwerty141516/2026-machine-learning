@@ -60,7 +60,7 @@ def make_rooms():
 rooms = make_rooms()
 
 # =========================
-# 경제 시나리오 (사이드바)
+# 경제 시나리오 (사이드바) - 🛠 변동 폭 대폭 확대
 # =========================
 scenario = st.sidebar.selectbox(
     "경제 시나리오 선택",
@@ -68,41 +68,44 @@ scenario = st.sidebar.selectbox(
 )
 
 if scenario == "경기호황":
-    macro = {"interest":5.0,"exchange":1450,"inflation":4.0,"demand":1.2,"supply":0.9}
+    # 고금리, 고환율, 고물가, 수요 폭발, 공급 부족 상황 극대화
+    macro = {"interest": 6.5, "exchange": 1550, "inflation": 5.5, "demand": 1.6, "supply": 0.6}
 elif scenario == "경기침체":
-    macro = {"interest":2.5,"exchange":1250,"inflation":1.5,"demand":0.8,"supply":1.2}
+    # 초저금리, 저환율, 디플레이션 우려, 수요 급감, 공급 과잉 상황 극대화
+    macro = {"interest": 1.5, "exchange": 1150, "inflation": 0.5, "demand": 0.5, "supply": 1.5}
 else:
-    macro = {"interest":3.5,"exchange":1350,"inflation":2.5,"demand":1.0,"supply":1.0}
+    macro = {"interest": 3.5, "exchange": 1350, "inflation": 2.5, "demand": 1.0, "supply": 1.0}
 
 # =========================
-# 🤖 머신러닝 학습 데이터 생성
+# 🤖 머신러닝 학습 데이터 생성 - 🛠 거시경제 가중치 강화
 # =========================
 @st.cache_data
 def make_ml_data(df):
     data = []
 
     for _, r in df.iterrows():
-        for _ in range(3):
+        for _ in range(5): # 데이터 다양성을 위해 반복 횟수 증가 (3 -> 5)
 
-            interest = random.uniform(2, 6)
-            exchange = random.uniform(1200, 1500)
-            inflation = random.uniform(1, 5)
-            demand = random.uniform(0.8, 1.3)
-            supply = random.uniform(0.8, 1.3)
+            interest = random.uniform(1.0, 7.0)
+            exchange = random.uniform(1100, 1600)
+            inflation = random.uniform(0.0, 6.0)
+            demand = random.uniform(0.4, 1.8)
+            supply = random.uniform(0.4, 1.8)
 
+            # 🛠 거시경제 변수들이 월세에 미치는 영향(가중치)을 크게 늘렸습니다.
             rent = (
                 r["rent"]
-                + (interest - 3.5) * 6
-                + (exchange - 1300) * 0.02
-                + (inflation - 2.5) * 4
-                + (demand - 1) * 12
-                - (supply - 1) * 12
+                + (interest - 3.5) * 12       # 금리 영향력 2배 (6 -> 12)
+                + (exchange - 1300) * 0.05    # 환율 영향력 확대 (0.02 -> 0.05)
+                + (inflation - 2.5) * 8       # 물가 영향력 2배 (4 -> 8)
+                + (demand - 1.0) * 25         # 수요 영향력 대폭 확대 (12 -> 25)
+                - (supply - 1.0) * 20         # 공급 영향력 대폭 확대 (12 -> 20)
 
                 + (r["jeonse_ratio"] * 0.01)
                 + (r["walk"] * -0.7)
                 + (r["size"] * 0.5)
 
-                + random.uniform(-3, 3)
+                + random.uniform(-2, 2)
             )
 
             data.append([
@@ -160,7 +163,6 @@ with col1:
 
     st.subheader(f"🌍 현재 경제 상태 ({scenario})")
     
-    # 🛠 [수정 포인트] 영문 키를 한글 이름과 단위로 매핑하여 깔끔한 표 형태로 출력
     macro_ko = {
         "지표": ["기준금리", "환율", "물가상승률", "수요 지수", "공급 지수"],
         "수치": [
@@ -231,7 +233,7 @@ if clicked is not None:
 
     c1, c2, c3 = st.columns(3)
 
-    c1.metric("현재 월세", f"{clicked['rent']}만원")
+    c1.metric("현재 매물 월세", f"{clicked['rent']}만원")
     c2.metric("ML 예측 월세", f"{pred:.1f}만원")
     c3.metric("AI 점수", f"{score}점")
 
@@ -246,18 +248,28 @@ if clicked is not None:
 
     st.subheader("📈 미래 예측 (6개월 변동 시뮬레이션)")
 
+    # 머신러닝 모델을 사용한 시나리오 기반 미래 예측
     future_predictions = []
     
     for i in range(1, 7):
         future_feature = feature.copy()
-        future_feature["interest"] += i * 0.1     
-        future_feature["inflation"] += i * 0.05   
+        
+        # 🛠 미래 시나리오 변화폭도 체감되도록 조금 더 뚜렷하게 조정
+        if scenario == "경기호황":
+            future_feature["interest"] += i * 0.15     # 호황기에는 금리가 계속 추가 인상되는 시나리오
+            future_feature["inflation"] += i * 0.1
+        elif scenario == "경기침체":
+            future_feature["interest"] -= i * 0.1      # 침체기에는 금리를 더 인하하는 시나리오
+            future_feature["inflation"] -= i * 0.05
+        else:
+            future_feature["interest"] += i * 0.05
+            future_feature["inflation"] += i * 0.02
         
         future_pred = predict(future_feature)
         future_predictions.append(future_pred)
 
     fig, ax = plt.subplots(figsize=(7, 3))
-    ax.plot(range(1, 7), future_predictions, marker="o", color="#1f77b4", linewidth=2)
+    ax.plot(range(1, 7), future_predictions, marker="o", color="#e34a33" if scenario=="경기호황" else "#3182bd", linewidth=2)
     ax.set_xlabel("개월 뒤")
     ax.set_ylabel("예측 월세 (만원)")
     ax.set_xticks(range(1, 7))
@@ -274,7 +286,8 @@ if clicked is not None:
 ✔ 수요/공급 반영  
 ✔ 지역 접근성 반영  
 
-예측 월세: {pred:.1f}만원
+선택하신 **[{scenario}]** 시나리오 요소를 가중 반영한 모델의 최종 결과입니다.
+예측 월세: **{pred:.1f}만원**
 """)
 
 else:
