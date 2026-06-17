@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.ensemble import RandomForestRegressor
 
-# 한글 폰트 설정 (Matplotlib 깨짐 방지 - 시스템에 따라 나눔고딕 등 지정 필요)
-plt.rcParams['font.family'] = 'Malgun Gothic' # Windows용 (Mac은 'AppleGothic')
+# 한글 폰트 설정 (Matplotlib 깨짐 방지)
+plt.rcParams['font.family'] = 'Malgun Gothic' # Windows용
 plt.rcParams['axes.unicode_minus'] = False
 
 st.set_page_config(page_title="서울 대학가 원룸 월세 예측 모델", layout="wide")
@@ -51,7 +51,7 @@ def make_rooms():
                 "size": random.randint(5, 12),
                 "walk": random.randint(1, 15),
 
-                # 👉 핵심 추가: 전월세 비율
+                # 전월세 비율
                 "jeonse_ratio": deposit / rent
             })
 
@@ -90,7 +90,6 @@ def make_ml_data(df):
             demand = random.uniform(0.8, 1.3)
             supply = random.uniform(0.8, 1.3)
 
-            # 👉 핵심: 전세/월세 구조 반영
             rent = (
                 r["rent"]
                 + (interest - 3.5) * 6
@@ -99,7 +98,6 @@ def make_ml_data(df):
                 + (demand - 1) * 12
                 - (supply - 1) * 12
 
-                # 📌 추가 핵심 요소
                 + (r["jeonse_ratio"] * 0.01)
                 + (r["walk"] * -0.7)
                 + (r["size"] * 0.5)
@@ -160,9 +158,21 @@ col1, col2 = st.columns([1, 2])
 with col1:
     selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 
-    # 🛠 [수정 포인트] 선택된 시나리오 명칭을 제목에 넣고 현재 macro 상태를 실시간 동기화하여 출력
     st.subheader(f"🌍 현재 경제 상태 ({scenario})")
-    st.json(macro)
+    
+    # 🛠 [수정 포인트] 영문 키를 한글 이름과 단위로 매핑하여 깔끔한 표 형태로 출력
+    macro_ko = {
+        "지표": ["기준금리", "환율", "물가상승률", "수요 지수", "공급 지수"],
+        "수치": [
+            f"{macro['interest']}%",
+            f"{macro['exchange']}원",
+            f"{macro['inflation']}%",
+            f"{macro['demand']}x",
+            f"{macro['supply']}x"
+        ]
+    }
+    df_macro = pd.DataFrame(macro_ko)
+    st.dataframe(df_macro, hide_index=True, use_container_width=True)
 
 filtered = rooms[rooms["univ"] == selected]
 lat, lon = UNIV[selected]
@@ -228,20 +238,18 @@ if clicked is not None:
     st.subheader("📊 핵심 분석")
 
     st.write(f"""
-    - 전세/월세 비율: {clicked['jeonse_ratio']:.2f}
-    - 도보 거리: {clicked['walk']}분
-    - 면적: {clicked['size']}평
-    - 보증금: {clicked['deposit']}만원
-    """)
+- 전세/월세 비율: {clicked['jeonse_ratio']:.2f}
+- 도보 거리: {clicked['walk']}분
+- 면적: {clicked['size']}평
+- 보증금: {clicked['deposit']}만원
+""")
 
     st.subheader("📈 미래 예측 (6개월 변동 시뮬레이션)")
 
-    # 머신러닝 모델을 사용한 시나리오 기반 미래 예측
     future_predictions = []
     
     for i in range(1, 7):
         future_feature = feature.copy()
-        # 시간에 흐름에 따라 금리와 물가가 소폭 상승하는 시나리오 반영
         future_feature["interest"] += i * 0.1     
         future_feature["inflation"] += i * 0.05   
         
