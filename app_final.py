@@ -168,4 +168,129 @@ with col1:
         "지표": ["기준금리", "환율", "물가상승률", "수요 지수", "공급 지수"],
         "수치": [
             f"{macro['interest']}%",
-            f"{
+            f"{macro['exchange']}원",
+            f"{macro['inflation']}%",
+            f"{macro['demand']}x",
+            f"{macro['supply']}x"
+        ]
+    }
+    df_macro = pd.DataFrame(macro_ko)
+    st.dataframe(df_macro, hide_index=True, use_container_width=True)
+
+filtered = rooms[rooms["univ"] == selected]
+lat, lon = UNIV[selected]
+
+with col2:
+    m = folium.Map(location=[lat, lon], zoom_start=15)
+
+    folium.Marker([lat, lon], tooltip=selected,
+                 icon=folium.Icon(color="red")).add_to(m)
+
+    for _, r in filtered.iterrows():
+        folium.CircleMarker(
+            location=[r["lat"], r["lon"]],
+            radius=5,
+            color="blue",
+            fill=True,
+            tooltip=f"{r['name']} | {r['rent']}만원"
+        ).add_to(m)
+
+    map_data = st_folium(m, height=550)
+
+clicked = None
+
+if map_data and map_data.get("last_object_clicked"):
+    c = map_data["last_object_clicked"]
+    temp = filtered.copy()
+    temp["d"] = (temp["lat"]-c["lat"])**2 + (temp["lon"]-c["lng"])**2
+    clicked = temp.sort_values("d").iloc[0]
+
+# =========================
+# 분석 결과 출력 영역
+# =========================
+st.markdown("---")
+
+if clicked is not None:
+
+    feature = {
+        "size": clicked["size"],
+        "walk": clicked["walk"],
+        "deposit": clicked["deposit"],
+        "jeonse_ratio": clicked["jeonse_ratio"],
+
+        "interest": macro["interest"],
+        "exchange": macro["exchange"],
+        "inflation": macro["inflation"],
+        "demand": macro["demand"],
+        "supply": macro["supply"]
+    }
+
+    pred = predict(feature)
+
+    avg = filtered["rent"].mean()
+    diff = clicked["rent"] - avg
+
+    score = max(50, min(100, int(100 - abs(diff)*1.5)))
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric("현재 매물 원래 월세", f"{clicked['rent']}만원")
+    c2.metric("ML 예측 월세", f"{pred:.1f}만원")
+    c3.metric("AI 점수", f"{score}점")
+
+    st.subheader("📊 핵심 분석")
+
+    st.write(f"""
+- 전세/월세 비율: {clicked['jeonse_ratio']:.2f}
+- 도보 거리: {clicked['walk']}분
+- 면적: {clicked['size']}평
+- 보증금: {clicked['deposit']}만원
+""")
+
+    st.subheader("📈 미래 예측 (6개월 변동 시뮬레이션)")
+
+    future_predictions = []
+    
+    for i in range(1, 7):
+        future_feature = feature.copy()
+        
+        if scenario == "경기호황":
+            future_feature["interest"] += i * 0.15     
+            future_feature["inflation"] += i * 0.1
+            future_feature["exchange"] -= i * 15       # 호황 지속 시 환율 추가 하락 트렌드
+        elif scenario == "경기침체":
+            future_feature["interest"] -= i * 0.1      
+            future_feature["inflation"] -= i * 0.05
+            future_feature["exchange"] += i * 20       # 침체 심화 시 환율 추가 상승 트렌드
+        else:
+            future_feature["interest"] += i * 0.05
+            future_feature["inflation"] += i * 0.02
+
+        future_pred = predict(future_feature)
+        future_predictions.append(future_pred)
+
+    fig, ax = plt.subplots(figsize=(7, 3))
+    ax.plot(range(1, 7), future_predictions, marker="o", color="#e34a33" if scenario=="경기호황" else "#3182bd", linewidth=2)
+    ax.set_xlabel("개월 뒤")
+    ax.set_ylabel("예측 월세 (만원)")
+    ax.set_xticks(range(1, 7))
+    ax.grid(True, linestyle="--", alpha=0.6)
+    st.pyplot(fig)
+
+    st.subheader("🤖 AI 설명")
+
+    st.info(f"""
+머신러닝 기반 분석:
+
+✔ 전세/월세 구조 반영  
+✔ 최근 환율 흐름(1,515원선) 및 거시경제 현실 고증 완료  
+✔ 수요/공급 반영  
+✔ 지역 접근성 반영  
+
+선택하신 **[{scenario}]** 시나리오를 반영한 결과입니다.
+수요·공급 가중치와 환율 방향성을 경제 원리에 맞춰 튜닝하여 시나리오별로 월세 예측치가 대폭 차이 납니다.
+예측 월세: **{pred:.1f}만원**
+""")
+
+else:
+    st.info("지도에서 매물을 클릭하면 해당 시나리오를 바탕으로 ML 분석이 시작됩니다.")
