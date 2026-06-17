@@ -271,8 +271,8 @@ if clicked is not None:
 
     fig, ax = plt.subplots(figsize=(7, 3))
     ax.plot(range(1, 7), future_predictions, marker="o", color="#e34a33" if scenario=="경기호황" else "#3182bd", linewidth=2)
-    ax.set_xlabel("개월 뒤")
-    ax.set_ylabel("예측 월세 (만원)")
+    ax.set_xlabel("개월")
+    ax.set_ylabel("예측 월세(만원)")
     ax.set_xticks(range(1, 7))
     ax.grid(True, linestyle="--", alpha=0.6)
     st.pyplot(fig)
