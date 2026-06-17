@@ -60,10 +60,10 @@ def make_rooms():
 rooms = make_rooms()
 
 # =========================
-# 경제 시나리오
+# 경제 시나리오 (사이드바)
 # =========================
 scenario = st.sidebar.selectbox(
-    "경제 시나리오",
+    "경제 시나리오 선택",
     ["보통", "경기호황", "경기침체"]
 )
 
@@ -153,22 +153,20 @@ def predict(row):
     return model.predict(X)[0]
 
 # =========================
-# UI
+# UI 배치 및 지도 출력
 # =========================
 col1, col2 = st.columns([1, 2])
 
 with col1:
     selected = st.selectbox("🏫 대학 선택", list(UNIV.keys()))
 
-    st.subheader("🌍 경제 상태")
-    st.write(macro)
+    # 🛠 [수정 포인트] 선택된 시나리오 명칭을 제목에 넣고 현재 macro 상태를 실시간 동기화하여 출력
+    st.subheader(f"🌍 현재 경제 상태 ({scenario})")
+    st.json(macro)
 
 filtered = rooms[rooms["univ"] == selected]
 lat, lon = UNIV[selected]
 
-# =========================
-# 지도
-# =========================
 with col2:
     m = folium.Map(location=[lat, lon], zoom_start=15)
 
@@ -195,7 +193,7 @@ if map_data and map_data.get("last_object_clicked"):
     clicked = temp.sort_values("d").iloc[0]
 
 # =========================
-# 분석
+# 분석 결과 출력 영역
 # =========================
 st.markdown("---")
 
@@ -236,18 +234,17 @@ if clicked is not None:
 - 보증금: {clicked['deposit']}만원
 """)
 
-    st.subheader("📈 미래 예측 (6개월)")
+    st.subheader("📈 미래 예측 (6개월 변동 시뮬레이션)")
 
-    # 💡 [개선 사항] 무작위 난수 대신 머신러닝 모델을 사용한 미래 시나리오 예측
+    # 머신러닝 모델을 사용한 시나리오 기반 미래 예측
     future_predictions = []
     
-    # 향후 6개월 동안 매달 금리가 0.1%씩 오르고 물가(인플레)가 0.05%씩 오르는 시나리오 가정
     for i in range(1, 7):
         future_feature = feature.copy()
-        future_feature["interest"] += i * 0.1     # 금리 변동 반영
-        future_feature["inflation"] += i * 0.05   # 물가 변동 반영
+        # 시간에 흐름에 따라 금리와 물가가 소폭 상승하는 시나리오 반영
+        future_feature["interest"] += i * 0.1     
+        future_feature["inflation"] += i * 0.05   
         
-        # 수정된 미래 경제 변수로 ML 모델 예측 수행
         future_pred = predict(future_feature)
         future_predictions.append(future_pred)
 
@@ -273,4 +270,4 @@ if clicked is not None:
 """)
 
 else:
-    st.info("지도에서 매물을 클릭하면 분석이 시작됩니다.")
+    st.info("지도에서 매물을 클릭하면 해당 시나리오를 바탕으로 ML 분석이 시작됩니다.")
