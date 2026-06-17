@@ -228,11 +228,11 @@ if clicked is not None:
     st.subheader("📊 핵심 분석")
 
     st.write(f"""
-- 전세/월세 비율: {clicked['jeonse_ratio']:.2f}
-- 도보 거리: {clicked['walk']}분
-- 면적: {clicked['size']}평
-- 보증금: {clicked['deposit']}만원
-""")
+    - 전세/월세 비율: {clicked['jeonse_ratio']:.2f}
+    - 도보 거리: {clicked['walk']}분
+    - 면적: {clicked['size']}평
+    - 보증금: {clicked['deposit']}만원
+    """)
 
     st.subheader("📈 미래 예측 (6개월 변동 시뮬레이션)")
 
