@@ -234,17 +234,40 @@ if clicked is not None:
     c2.metric("ML 예측 월세", f"{pred:.1f}만원")
     c3.metric("AI 점수", f"{score}점")
 
-    # 🛠 [편의성 개선] 탭 분리를 통한 가독성 상향 및 자취 꿀팁 정보 제공 추가
     tab1, tab2, tab3 = st.tabs(["📊 ML 분석 & 예측", "📝 매물 방문 체크리스트", "💡 원룸 계약 필수 상식"])
 
     with tab1:
-        st.subheader("📊 매물 특성 분석")
-        st.write(f"""
-        - **전세/월세 비율**: {clicked['jeonse_ratio']:.2f} (보증금 대비 월세 비율)
-        - **도보 거리**: 학교까지 {clicked['walk']}분
-        - **방 크기**: {clicked['size']}평
-        - **보증금**: {clicked['deposit']}만원
-        """)
+        col_info1, col_info2 = st.columns([1, 1])
+        
+        with col_info1:
+            st.subheader("📊 매물 특성")
+            st.write(f"""
+            - **전세/월세 비율**: {clicked['jeonse_ratio']:.2f}
+            - **도보 거리**: 학교까지 {clicked['walk']}분
+            - **방 크기**: {clicked['size']}평
+            - **보증금**: {clicked['deposit']}만원
+            """)
+        
+        with col_info2:
+            # 🛠 [신규 추가] 머신러닝 예측 기반 AI 자연어 요약 시스템
+            st.subheader("🤖 AI 매물 진단 보고서")
+            
+            # 매물 가격 수준 진단
+            price_eval = "현재 이 매물은 주변 평균 대비 유사하거나 적정 수준입니다."
+            if diff > 5:
+                price_eval = "현재 매물 가격이 주변 평균 원룸 시세보다 다소 높게 책정되어 있습니다."
+            elif diff < -5:
+                price_eval = "현재 매물 가격이 주변 평균 원룸 시세 대비 저렴한 편으로 메리트가 있습니다."
+                
+            # 시나리오별 설명 동적 생성
+            if scenario == "경기호황":
+                macro_eval = f"특히 현재 **{scenario}** 상황으로 인해 대학가 유입 수요({macro['demand']}x)가 폭발하고 공급({macro['supply']}x)이 부족한 상태입니다. 고금리와 고물가 기조까지 더해져, 머신러닝 모델은 이 매물의 적정 월세를 현재 단가보다 높은 **{pred:.1f}만원** 선까지 상향 예측하고 있습니다."
+            elif scenario == "경기침체":
+                macro_eval = f"반면 현재 **{scenario}** 상황에서는 대학가 인구 수요({macro['demand']}x)가 급감하고 매물 공급({macro['supply']}x)이 과잉되어 시장이 위축되어 있습니다. 이에 따라 머신러닝 모델은 이 방의 미래 가치를 대폭 낮춘 **{pred:.1f}만원** 선으로 하향 진단했습니다."
+            else:
+                macro_eval = f"안정적인 **{scenario}** 경제 지표 아래에서 머신러닝 모델이 예측한 적정 월세는 **{pred:.1f}만원**입니다. 급격한 시세 변동 우려는 적은 편입니다."
+
+            st.write(f"📝 {price_eval} {macro_eval}")
 
         st.subheader("📈 미래 예측 (6개월 변동 시뮬레이션)")
         future_predictions = []
