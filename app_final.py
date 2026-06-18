@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import random
-import math
 import folium
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
@@ -28,18 +27,6 @@ UNIV = {
     "고려대": (37.5894, 127.0324)
 }
 
-# 실제 대학가 주거지역 좌표
-HOUSING_AREAS = {
-    "연세대": [(37.5595,126.9360),(37.5620,126.9345),(37.5670,126.9355),(37.5680,126.9390),(37.5615,126.9410)],
-    "서울대": [(37.4790,126.9520),(37.4815,126.9540),(37.4830,126.9500),(37.4770,126.9560),(37.4850,126.9525)],
-    "고려대": [(37.5860,127.0300),(37.5885,127.0315),(37.5900,127.0295),(37.5910,127.0340),(37.5850,127.0345)]
-}
-
-def calc_walk_minutes(room_lat, room_lon, school_lat, school_lon):
-    distance_km = (((room_lat - school_lat)**2 + (room_lon - school_lon)**2) ** 0.5) * 111
-    return max(1, int(distance_km * 12))
-
-
 # =========================
 # 가상 매물 생성
 # =========================
@@ -48,34 +35,23 @@ def make_rooms():
     rows = []
     random.seed(42)
 
-    for u, (school_lat, school_lon) in UNIV.items():
-        for i in range(80):
-
+    for u, (lat, lon) in UNIV.items():
+        for i in range(30):
             deposit = random.randint(500, 3000)
             rent = random.randint(40, 90)
-
-            center_lat, center_lon = random.choice(HOUSING_AREAS[u])
-
-            distance = random.uniform(0.002, 0.007)
-            angle = random.uniform(0, 2 * math.pi)
-
-            lat = center_lat + distance * math.cos(angle)
-            lon = center_lon + distance * math.sin(angle)
-
-            walk = calc_walk_minutes(
-                lat, lon,
-                school_lat, school_lon
-            )
 
             rows.append({
                 "name": f"{u} 원룸 {i+1}",
                 "univ": u,
-                "lat": lat,
-                "lon": lon,
+                "lat": lat + random.uniform(-0.004, 0.004),
+                "lon": lon + random.uniform(-0.004, 0.004),
+
                 "rent": rent,
                 "deposit": deposit,
                 "size": random.randint(5, 12),
-                "walk": walk,
+                "walk": random.randint(1, 15),
+
+                # 전월세 비율
                 "jeonse_ratio": deposit / rent
             })
 
@@ -206,7 +182,7 @@ filtered = rooms[rooms["univ"] == selected]
 lat, lon = UNIV[selected]
 
 with col2:
-    m = folium.Map(location=[lat, lon], zoom_start=14)
+    m = folium.Map(location=[lat, lon], zoom_start=15)
 
     folium.Marker([lat, lon], tooltip=selected,
                  icon=folium.Icon(color="red")).add_to(m)
